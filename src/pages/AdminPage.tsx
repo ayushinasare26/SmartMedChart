@@ -93,7 +93,7 @@ export default function AdminPage() {
     const isDoc = presetRole === 'DOCTOR';
     const isNurse = presetRole === 'NURSE';
     const isPharm = presetRole === 'PHARMACIST';
-    const isAllied = presetRole === 'OTHER_STAFF';
+    const isAllied = presetRole === 'OTHER_STAFF' || presetRole === 'ALLIED_STAFF';
 
     setEnrollForm({
       name: '',
@@ -159,7 +159,7 @@ export default function AdminPage() {
     const doctors = staffList.filter(u => u.role === 'DOCTOR').length;
     const nurses = staffList.filter(u => u.role === 'NURSE').length;
     const pharmacists = staffList.filter(u => u.role === 'PHARMACIST').length;
-    const allied = staffList.filter(u => u.role === 'OTHER_STAFF').length;
+    const allied = staffList.filter(u => u.role === 'OTHER_STAFF' || (u.role as string) === 'ALLIED_STAFF').length;
     const admins = staffList.filter(u => u.role === 'ADMIN').length;
 
     return { total, onDutyCount, doctors, nurses, pharmacists, allied, admins };
@@ -169,8 +169,12 @@ export default function AdminPage() {
   const filteredStaff = useMemo(() => {
     return staffList.filter(staff => {
       // Role filter
-      if (roleFilter !== 'ALL' && staff.role !== roleFilter) {
-        return false;
+      if (roleFilter !== 'ALL') {
+        if (roleFilter === 'OTHER_STAFF') {
+          if (staff.role !== 'OTHER_STAFF' && (staff.role as string) !== 'ALLIED_STAFF') return false;
+        } else if (staff.role !== roleFilter) {
+          return false;
+        }
       }
       // Search query
       if (searchQuery.trim()) {
@@ -944,7 +948,7 @@ export default function AdminPage() {
                     const isDoc = staff.role === 'DOCTOR';
                     const isNurse = staff.role === 'NURSE';
                     const isPharm = staff.role === 'PHARMACIST';
-                    const isAllied = staff.role === 'OTHER_STAFF';
+                    const isAllied = staff.role === 'OTHER_STAFF' || (staff.role as string) === 'ALLIED_STAFF';
                     const isAdmin = staff.role === 'ADMIN';
 
                     return (
