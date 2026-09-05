@@ -1,0 +1,264 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// UserRole: DOCTOR | NURSE | PHARMACIST | ADMIN
+// PatientStatus: ACTIVE | DISCHARGED | TRANSFERRED
+// PrescriptionStatus: PENDING | ACTIVE | STAT | HELD | DISCONTINUED | COMPLETED
+// ScheduleStatus: PENDING | GIVEN | HELD | DELAYED | MISSED | CANCELLED
+// AlertSeverity: INFO | WARNING | HIGH | CRITICAL
+// AlertType: ALLERGY_CONFLICT | DRUG_INTERACTION | DOSE_RANGE | DUPLICATE_ORDER | RENAL_DOSE | HEPATIC_DOSE | HIGH_ALERT_MED | STAT_URGENT
+// NotificationPriority: LOW | NORMAL | HIGH | URGENT
+// ShiftType: DAY | EVENING | NIGHT
+// VerificationMethod: BARCODE_SCAN | MANUAL_ENTRY | QR_CODE
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  role         String   // DOCTOR | NURSE | PHARMACIST | ADMIN
+  passwordHash String
+  staffId      String   @unique
+  ward         String?
+  department   String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  prescriptions        Prescription[]         @relation("PrescribedBy")
+  administrations      AdministrationRecord[] @relation("AdministeredBy")
+  witnessedAdmin       AdministrationRecord[] @relation("WitnessedBy")
+  overriddenAlerts     SafetyAlert[]          @relation("OverriddenBy")
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  shifts               Shift[]
+  scheduleAdministered MedicationSchedule[]   @relation("AdminBy")
+
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Ward {
+  id        String   @id @default(uuid())
+  name      String
+  unit      String   @unique
+  capacity  Int
+  occupancy Int      @default(0)
+  location  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts   Shift[]
+  patients Patient[]
+}
+
+model Shift {
+  id        String   @id @default(uuid())
+  wardId    String
+  ward      Ward     @relation(fields: [wardId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  startTime DateTime
+  endTime   DateTime
+  type      String   // DAY | EVENING | NIGHT
+  createdAt DateTime @default(now())
+}
+
+model Patient {
+  id                 String   @id @default(uuid())
+  mrn                String   @unique
+  name               String
+  dob                DateTime
+  sex                String
+  weight             Float
+  weightUnit         String   @default("kg")
+  wardId             String?
+  ward               Ward?    @relation(fields: [wardId], references: [id])
+  bed                String?
+  attendingId        String?
+  admissionDiagnosis String?
+  npoStatus          Boolean  @default(false)
+  codeStatus         String   @default("Full")
+  isolationStatus    Boolean  @default(false)
+  status             String   @default("ACTIVE") // ACTIVE | DISCHARGED | TRANSFERRED
+  eGFR               Float?
+  creatinine         Float?
+  bilirubin          Float?
+  platelets          Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  allergies       Allergy[]
+  prescriptions   Prescription[]
+  schedules       MedicationSchedule[]
+  administrations AdministrationRecord[]
+  safetyAlerts    SafetyAlert[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+}
+
+model Allergy {
+  id              String    @id @default(uuid())
+  patientId       String
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  allergen        String
+  severity        String    // Mild | Moderate | Severe | Anaphylaxis
+  reaction        String
+  verifiedAt      DateTime?
+  verifiedBy      String?
+  crossReactsWith String?
+  createdAt       DateTime  @default(now())
+}
+
+model Prescription {
+  id                 String    @id @default(uuid())
+  patientId          String
+  patient            Patient   @relation(fields: [patientId], references: [id])
+  prescriberId       String
+  prescriber         User      @relation("PrescribedBy", fields: [prescriberId], references: [id])
+  medicationName     String
+  genericName        String?
+  medicationClass    String?
+  dose               Float
+  unit               String
+  route              String
+  frequency          String
+  startDate          DateTime
+  stopDate           DateTime?
+  status             String    @default("ACTIVE") // PENDING | ACTIVE | STAT | HELD | DISCONTINUED | COMPLETED
+  indication         String?
+  isStatOrder        Boolean   @default(false)
+  isContinuous       Boolean   @default(false)
+  infusionRate       String?
+  pharmacyVerified   Boolean   @default(false)
+  pharmacyVerifiedAt DateTime?
+  pharmacyVerifiedBy String?
+  requiresCoSign     Boolean   @default(false)
+  coSignedById       String?
+  coSignedAt         DateTime?
+  overrideReason     String?
+  formularyRef       String?
+  rxNumber           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  schedules    MedicationSchedule[]
+  safetyAlerts SafetyAlert[]
+}
+
+model MedicationSchedule {
+  id                 String    @id @default(uuid())
+  prescriptionId     String
+  prescription       Prescription @relation(fields: [prescriptionId], references: [id])
+  patientId          String
+  patient            Patient   @relation(fields: [patientId], references: [id])
+  scheduledTime      DateTime
+  status             String    @default("PENDING") // PENDING | GIVEN | HELD | DELAYED | MISSED | CANCELLED
+  administeredById   String?
+  administeredBy     User?     @relation("AdminBy", fields: [administeredById], references: [id])
+  administeredAt     DateTime?
+  verificationMethod String?   // BARCODE_SCAN | MANUAL_ENTRY | QR_CODE
+  holdReason         String?
+  delayReason        String?
+  delayMinutes       Int?
+  preparedAt         DateTime?
+  dispensedFrom      String?
+  batchNumber        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  administrationRecord AdministrationRecord?
+}
+
+model AdministrationRecord {
+  id               String             @id @default(uuid())
+  scheduleId       String             @unique
+  schedule         MedicationSchedule @relation(fields: [scheduleId], references: [id])
+  patientId        String
+  patient          Patient            @relation(fields: [patientId], references: [id])
+  administeredById String
+  administeredBy   User               @relation("AdministeredBy", fields: [administeredById], references: [id])
+  dose             Float
+  unit             String
+  route            String
+  notes            String?
+  fiveRightsVerified Boolean          @default(false)
+  rightPatient     Boolean            @default(false)
+  rightDrug        Boolean            @default(false)
+  rightDose        Boolean            @default(false)
+  rightRoute       Boolean            @default(false)
+  rightTime        Boolean            @default(false)
+  barcodeScanned   Boolean            @default(false)
+  witnessId        String?
+  witness          User?              @relation("WitnessedBy", fields: [witnessId], references: [id])
+  signedAt         DateTime           @default(now())
+  adminId          String             @unique @default(uuid())
+  safetyScore      Int                @default(100)
+}
+
+model SafetyAlert {
+  id             String    @id @default(uuid())
+  patientId      String
+  patient        Patient   @relation(fields: [patientId], references: [id])
+  prescriptionId String?
+  prescription   Prescription? @relation(fields: [prescriptionId], references: [id])
+  alertType      String    // ALLERGY_CONFLICT | DRUG_INTERACTION | DOSE_RANGE | etc.
+  severity       String    // INFO | WARNING | HIGH | CRITICAL
+  message        String
+  detail         String?
+  isOverridden   Boolean   @default(false)
+  isResolved     Boolean   @default(false)
+  overrideReason String?
+  overrideById   String?
+  overrideBy     User?     @relation("OverriddenBy", fields: [overrideById], references: [id])
+  overriddenAt   DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  patientId   String?
+  patient     Patient? @relation(fields: [patientId], references: [id])
+  action      String
+  resource    String
+  resourceId  String?
+  detail      String?
+  ipAddress   String?
+  workstation String?
+  hmacHash    String
+  severity    String   @default("Normal")
+  createdAt   DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id])
+  type      String
+  message   String
+  detail    String?
+  isRead    Boolean  @default(false)
+  priority  String   @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  createdAt DateTime @default(now())
+}

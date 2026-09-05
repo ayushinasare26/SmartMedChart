@@ -1,0 +1,154 @@
+import { useQuery } from '@tanstack/react-query';
+import { dashboardService, prescriptionService, patientService } from '../services/api.services';
+import { AlertTriangle, FileText, Users, Activity, Shield, Plus, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { format } from 'date-fns';
+
+export default function DoctorDashboardPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['dashboard-doctor'],
+    queryFn: dashboardService.doctor,
+    refetchInterval: 30000,
+  });
+
+  const { data: patients = [] } = useQuery({
+    queryKey: ['patients-active'],
+    queryFn: () => patientService.getAll({ status: 'ACTIVE' }),
+  });
+
+  return (
+    <div>
+      {/* Top Bar */}
+      <div className="top-bar">
+        <div className="top-bar-section">
+          <div style={{ width: 28, height: 28, borderRadius: 6, background: 'linear-gradient(135deg,#1d4ed8,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'white', fontSize: 12 }}>S</div>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>SmartMedChart</span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Hospital OS V4.2</span>
+        </div>
+        <div className="top-bar-section"><span>Cardiothoracic ICU (North Wing)</span></div>
+        <div className="top-bar-section">
+          <div className="live-dot" style={{ width: 6, height: 6 }} />
+          <span>EHR Live Sync Active</span>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px' }}>
+          {stats?.criticalAlerts > 0 && (
+            <span className="chip chip-stat"><AlertTriangle size={11} /> {stats.criticalAlerts} Critical STAT</span>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'white' }}>DS</div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)' }}>{user?.name}</div>
+              <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Attending Intensivist</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="page-content">
+        <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)' }}>Doctor Overview</h1>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+              {format(new Date(), 'EEEE, MMMM d, yyyy')} · ICU Clinical Dashboard
+            </p>
+          </div>
+          <button onClick={() => navigate('/prescriptions/new')} className="btn-primary">
+            <Plus size={14} /> New CPOE Order
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
+          {[
+            { label: 'Active Patients', value: stats?.totalPatients ?? 0, icon: Users, color: 'var(--color-accent-blue-light)' },
+            { label: 'Active Orders', value: stats?.activeOrders ?? 0, icon: FileText, color: 'var(--color-given-green)' },
+            { label: 'Pending Co-Signs', value: stats?.pendingCoSign ?? 0, icon: Clock, color: 'var(--color-due-amber)', alert: stats?.pendingCoSign > 0 },
+            { label: 'Critical Alerts', value: stats?.criticalAlerts ?? 0, icon: AlertTriangle, color: 'var(--color-stat-red)', alert: stats?.criticalAlerts > 0 },
+          ].map(({ label, value, icon: Icon, color, alert }) => (
+            <div key={label} className="stat-card" style={alert ? { borderColor: 'rgba(239,68,68,0.5)', background: 'rgba(239,68,68,0.05)' } : {}}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+                <Icon size={16} color={color} />
+              </div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: alert ? 'var(--color-stat-red)' : 'var(--color-text-primary)' }}>{isLoading ? '—' : value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          {/* Recent Prescriptions */}
+          <div className="card">
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>Recent CPOE Orders</h3>
+              <button onClick={() => navigate('/prescriptions')} className="btn-ghost" style={{ fontSize: 11 }}>View All</button>
+            </div>
+            {(stats?.recentPrescriptions || []).slice(0, 6).map((rx: any) => (
+              <div key={rx.id} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{rx.medicationName}</span>
+                    {rx.isStatOrder && <span className="chip chip-stat">STAT</span>}
+                    {rx.status === 'HELD' && <span className="chip chip-held">HELD</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    {rx.patient?.name} · Bed {rx.patient?.bed} · {rx.dose}{rx.unit} {rx.route}
+                  </div>
+                  {rx.safetyAlerts?.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      <AlertTriangle size={11} color="var(--color-stat-red)" />
+                      <span style={{ fontSize: 11, color: 'var(--color-stat-red)' }}>{rx.safetyAlerts.length} Safety Alert(s)</span>
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => navigate(`/patients/${rx.patientId}`)} className="btn-ghost" style={{ fontSize: 11, padding: '5px 10px' }}>View</button>
+              </div>
+            ))}
+          </div>
+
+          {/* Active Patients */}
+          <div className="card">
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>Active Patients</h3>
+              <button onClick={() => navigate('/patients')} className="btn-ghost" style={{ fontSize: 11 }}>View All</button>
+            </div>
+            {(patients as any[]).slice(0, 6).map((p: any) => (
+              <div
+                key={p.id}
+                style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', cursor: 'pointer', transition: 'background 0.15s' }}
+                onClick={() => navigate(`/patients/${p.id}`)}
+                onMouseOver={e => (e.currentTarget.style.background = 'var(--color-bg-hover)')}
+                onMouseOut={e => (e.currentTarget.style.background = '')}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--color-bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', flexShrink: 0 }}>
+                    {p.bed?.replace('ICU-', '')}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</span>
+                      {p.npoStatus && <span style={{ fontSize: 10, color: 'var(--color-due-amber)', fontWeight: 700 }}>NPO</span>}
+                      {p.isolationStatus && <span style={{ fontSize: 10, color: 'var(--color-stat-red)', fontWeight: 700, background: 'var(--color-stat-red-bg)', padding: '1px 5px', borderRadius: 3 }}>ISOLATION</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                      MRN: {p.mrn} · {p.sex} · {p.weight}kg
+                    </div>
+                    {p.allergies?.length > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--color-stat-red)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                        <AlertTriangle size={10} /> {p.allergies[0].allergen} Allergy
+                        {p.allergies.length > 1 && ` +${p.allergies.length - 1} more`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
