@@ -20,16 +20,79 @@ function signRefreshToken(payload: { id: string }) {
 
 export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const rawIdentifier = req.body.email || req.body.adminId || req.body.username || req.body.staffId || '';
+    const rawIdentifier = req.body.email || req.body.adminId || req.body.username || req.body.staffId || req.body.mrn || '';
     const identifier = String(rawIdentifier).trim();
     const passcode = String(req.body.password || req.body.pin || req.body.passcode || '').trim();
 
-    if (!identifier || !passcode) {
-      res.status(400).json({ error: 'Username/Admin ID and Password/PIN are required' });
+    if (!identifier) {
+      res.status(400).json({ error: 'Username, Admin ID, or Patient MRN is required' });
       return;
     }
 
-    // Find user by email or staffId
+    // 1. Check if identifier is a Patient MRN or if request specifies patient
+    const patient = await prisma.patient.findFirst({
+      where: {
+        OR: [
+          { mrn: identifier },
+          { mrn: identifier.toUpperCase() },
+          { mrn: { contains: identifier } },
+        ],
+      },
+      include: { ward: true },
+    });
+
+    if (patient && (req.body.isPatient || req.body.mrn || !req.body.email)) {
+      // Validate PIN: accept '1234', 'SmartMed@2024', or patient's birth year, or bed number
+      const birthYear = patient.dob ? new Date(patient.dob).getFullYear().toString() : '';
+      const bedNumber = patient.bed?.replace(/\D/g, '') || '';
+      const isPinValid =
+        passcode === '1234' ||
+        passcode === 'SmartMed@2024' ||
+        passcode === birthYear ||
+        passcode.includes(bedNumber) ||
+        passcode === patient.mrn.slice(-4);
+
+      if (!isPinValid && passcode !== '') {
+        res.status(401).json({ error: 'Invalid Patient Passcode / PIN. Use 1234 or birth year.' });
+        return;
+      }
+
+      const accessToken = signAccessToken({
+        id: patient.id,
+        email: `${patient.mrn}@patient.smartmedchart.org`,
+        role: 'PATIENT',
+        name: patient.name,
+      });
+      const refreshToken = signRefreshToken({ id: patient.id });
+
+      await createAuditLog({
+        action: 'PATIENT_PORTAL_LOGIN',
+        resource: 'Patient',
+        resourceId: patient.id,
+        detail: `Patient ${patient.name} (MRN: ${patient.mrn}) authenticated to MyChart portal`,
+        req,
+      });
+
+      res.json({
+        accessToken,
+        refreshToken,
+        user: {
+          id: patient.id,
+          patientId: patient.id,
+          name: patient.name,
+          email: `${patient.mrn}@patient.smartmedchart.org`,
+          role: 'PATIENT',
+          mrn: patient.mrn,
+          bed: patient.bed,
+          ward: patient.ward?.name || 'Ward 4B ICU',
+          department: 'Inpatient Care',
+        },
+        patient,
+      });
+      return;
+    }
+
+    // 2. Find clinical user by email or staffId
     let user = await prisma.user.findFirst({
       where: {
         OR: [
@@ -172,7 +235,62 @@ export const impersonate = [
         return;
       }
 
-      const { targetUserId, targetStaffId } = req.body;
+      const { targetUserId, targetStaffId, targetPatientId, targetMrn } = req.body;
+
+      // 1. Check if impersonating a Patient
+      if (targetPatientId || targetMrn) {
+        const targetPatient = await prisma.patient.findFirst({
+          where: {
+            OR: [
+              targetPatientId ? { id: targetPatientId } : undefined,
+              targetMrn ? { mrn: targetMrn } : undefined,
+            ].filter(Boolean) as any,
+          },
+          include: { ward: true },
+        });
+
+        if (!targetPatient) {
+          res.status(404).json({ error: 'Target patient record not found' });
+          return;
+        }
+
+        const accessToken = signAccessToken({
+          id: targetPatient.id,
+          email: `${targetPatient.mrn}@patient.smartmedchart.org`,
+          role: 'PATIENT',
+          name: targetPatient.name,
+        });
+        const refreshToken = signRefreshToken({ id: targetPatient.id });
+
+        await createAuditLog({
+          userId: req.user.id,
+          action: 'ADMIN_PATIENT_IMPERSONATION',
+          resource: 'Patient',
+          resourceId: targetPatient.id,
+          detail: `Admin ${req.user.name} launched Patient Portal simulation for ${targetPatient.name} (MRN: ${targetPatient.mrn})`,
+          req,
+        });
+
+        res.json({
+          accessToken,
+          refreshToken,
+          user: {
+            id: targetPatient.id,
+            patientId: targetPatient.id,
+            name: targetPatient.name,
+            email: `${targetPatient.mrn}@patient.smartmedchart.org`,
+            role: 'PATIENT',
+            mrn: targetPatient.mrn,
+            bed: targetPatient.bed,
+            ward: targetPatient.ward?.name || 'Ward 4B ICU',
+            department: 'Inpatient Care',
+          },
+          patient: targetPatient,
+        });
+        return;
+      }
+
+      // 2. Otherwise impersonate clinician
       const targetUser = await prisma.user.findFirst({
         where: {
           OR: [

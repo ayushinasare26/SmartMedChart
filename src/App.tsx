@@ -11,10 +11,12 @@ import BedsideScannerPage from './pages/BedsideScannerPage';
 import SafetyAuditPage from './pages/SafetyAuditPage';
 import ReportsPage from './pages/ReportsPage';
 import AdminPage from './pages/AdminPage';
+import PatientPortalPage from './pages/PatientPortalPage';
 import { useAuth } from './hooks/useAuth';
 
 function RoleRedirect() {
   const { user } = useAuth();
+  if (user?.role === 'PATIENT') return <Navigate to="/patient-portal" replace />;
   if (user?.role === 'NURSE') return <Navigate to="/nurse" replace />;
   if (user?.role === 'DOCTOR') return <Navigate to="/doctor" replace />;
   if (user?.role === 'PHARMACIST') return <Navigate to="/prescriptions" replace />;
@@ -27,6 +29,7 @@ function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['ADMIN', 'DOCTOR']}><AdminPage /></ProtectedRoute>} />
+      <Route path="/patient-portal" element={<ProtectedRoute allowedRoles={['PATIENT', 'ADMIN', 'DOCTOR', 'NURSE']}><PatientPortalPage /></ProtectedRoute>} />
 
       <Route
         element={

@@ -1,21 +1,23 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { userService } from '../services/api.services';
+import { userService, patientService } from '../services/api.services';
 import { useAuth } from '../hooks/useAuth';
 import {
   Shield, UserCheck, Stethoscope, Briefcase, Plus, Search,
   LogIn, User, Award, CheckCircle2, XCircle, Clock,
   ExternalLink, LogOut, Check, X, AlertCircle, RefreshCw,
   QrCode, UserPlus, FileText, ChevronRight, Activity, Building2,
-  SlidersHorizontal, HeartPulse, Pill, FlaskConical, Eye
+  SlidersHorizontal, HeartPulse, Pill, FlaskConical, Eye,
+  Heart, Bed, AlertTriangle, Users
 } from 'lucide-react';
+import { format } from 'date-fns';
 
 interface StaffUser {
   id: string;
   name: string;
   email: string;
-  role: 'DOCTOR' | 'NURSE' | 'PHARMACIST' | 'ADMIN' | 'OTHER_STAFF';
+  role: 'DOCTOR' | 'NURSE' | 'PHARMACIST' | 'ADMIN' | 'OTHER_STAFF' | 'ALLIED_STAFF';
   staffId: string;
   ward?: string;
   department?: string;
@@ -34,22 +36,31 @@ export default function AdminPage() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
-  // Filters & Search
-  const [searchQuery, setSearchQuery] = useState('');
+  // Active Main Directory View: 'STAFF' | 'PATIENTS'
+  const [directoryView, setDirectoryView] = useState<'STAFF' | 'PATIENTS'>('STAFF');
+
+  // Staff Filters & Search
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'DOCTOR' | 'NURSE' | 'PHARMACIST' | 'OTHER_STAFF' | 'ADMIN'>('ALL');
 
+  // Patient Filters & Search
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientFilter, setPatientFilter] = useState<'ALL' | 'STAT' | 'ISOLATION' | 'NPO'>('ALL');
+
   // Modals
-  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [showEnrollStaffModal, setShowEnrollStaffModal] = useState(false);
+  const [showAdmitPatientModal, setShowAdmitPatientModal] = useState(false);
   const [badgeModalUser, setBadgeModalUser] = useState<StaffUser | null>(null);
+  const [wristbandModalPatient, setWristbandModalPatient] = useState<any | null>(null);
 
   // Auto-open enroll modal if ?enroll=true in URL
   useEffect(() => {
     if (searchParams.get('enroll') === 'true') {
-      setShowEnrollModal(true);
+      setShowEnrollStaffModal(true);
     }
   }, [searchParams]);
 
-  // Form State for Enrollment
+  // Form State for Staff Enrollment
   const [enrollForm, setEnrollForm] = useState({
     name: '',
     email: '',
@@ -66,22 +77,66 @@ export default function AdminPage() {
     password: 'SmartMed@2024'
   });
 
+  // Form State for Admitting Patient
+  const [admitForm, setAdmitForm] = useState({
+    name: '',
+    mrn: `940${Math.floor(20 + Math.random() * 80)}-${Math.floor(10 + Math.random() * 90)}`,
+    dob: '1979-03-14',
+    sex: 'Male',
+    weight: 72,
+    bed: 'Bed ICU-15',
+    admissionDiagnosis: 'Acute Inpatient Observation',
+    codeStatus: 'Full',
+    npoStatus: false,
+    isolationStatus: false,
+    allergy: 'No Known Drug Allergies (NKDA)'
+  });
+
   // Fetch all staff users
-  const { data: staffList = [], isLoading, refetch } = useQuery<StaffUser[]>({
+  const { data: staffList = [], isLoading: isStaffLoading } = useQuery<StaffUser[]>({
     queryKey: ['all-staff-users'],
     queryFn: () => userService.getAll(),
   });
 
-  // Mutations
+  // Fetch all patients
+  const { data: patientsList = [], isLoading: isPatientsLoading } = useQuery<any[]>({
+    queryKey: ['all-inpatients-admin'],
+    queryFn: () => patientService.getAll(),
+  });
+
+  // Staff Enrollment Mutation
   const enrollMutation = useMutation({
     mutationFn: (data: any) => userService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-staff-users'] });
-      setShowEnrollModal(false);
+      setShowEnrollStaffModal(false);
       resetEnrollForm();
     }
   });
 
+  // Patient Admission Mutation
+  const admitMutation = useMutation({
+    mutationFn: (data: any) => patientService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-inpatients-admin'] });
+      setShowAdmitPatientModal(false);
+      setAdmitForm({
+        name: '',
+        mrn: `940${Math.floor(20 + Math.random() * 80)}-${Math.floor(10 + Math.random() * 90)}`,
+        dob: '1979-03-14',
+        sex: 'Male',
+        weight: 72,
+        bed: 'Bed ICU-15',
+        admissionDiagnosis: 'Acute Inpatient Observation',
+        codeStatus: 'Full',
+        npoStatus: false,
+        isolationStatus: false,
+        allergy: 'No Known Drug Allergies (NKDA)'
+      });
+    }
+  });
+
+  // Duty Toggle Mutation
   const dutyMutation = useMutation({
     mutationFn: (id: string) => userService.toggleDuty(id),
     onSuccess: () => {
@@ -130,30 +185,34 @@ export default function AdminPage() {
 
   const handleOpenEnrollModal = (presetRole = 'DOCTOR') => {
     resetEnrollForm(presetRole);
-    setShowEnrollModal(true);
+    setShowEnrollStaffModal(true);
   };
 
-  // Impersonate / Launch Workstation
-  const handleImpersonate = async (targetUser: StaffUser) => {
+  // Impersonate Clinician
+  const handleImpersonateStaff = async (targetUser: StaffUser) => {
     try {
       await impersonate(targetUser.id, targetUser.staffId);
-      // Route based on role
-      if (targetUser.role === 'DOCTOR') {
-        navigate('/doctor');
-      } else if (targetUser.role === 'NURSE') {
-        navigate('/nurse');
-      } else if (targetUser.role === 'PHARMACIST') {
-        navigate('/prescriptions');
-      } else {
-        navigate('/patients');
-      }
+      if (targetUser.role === 'DOCTOR') navigate('/doctor');
+      else if (targetUser.role === 'NURSE') navigate('/nurse');
+      else if (targetUser.role === 'PHARMACIST') navigate('/prescriptions');
+      else navigate('/patients');
     } catch (err: any) {
-      alert('Simulation sign-in failed: ' + (err?.response?.data?.message || err.message));
+      alert('Clinician simulation failed: ' + (err?.response?.data?.message || err.message));
     }
   };
 
-  // KPI Calculations
-  const stats = useMemo(() => {
+  // Impersonate Patient
+  const handleImpersonatePatient = async (targetPatient: any) => {
+    try {
+      await impersonate(undefined, undefined, targetPatient.id, targetPatient.mrn);
+      navigate('/patient-portal');
+    } catch (err: any) {
+      alert('Patient portal simulation failed: ' + (err?.response?.data?.message || err.message));
+    }
+  };
+
+  // Staff KPI Calculations
+  const staffStats = useMemo(() => {
     const total = staffList.length;
     const onDutyCount = staffList.filter(u => u.onDuty).length;
     const doctors = staffList.filter(u => u.role === 'DOCTOR').length;
@@ -161,14 +220,12 @@ export default function AdminPage() {
     const pharmacists = staffList.filter(u => u.role === 'PHARMACIST').length;
     const allied = staffList.filter(u => u.role === 'OTHER_STAFF' || (u.role as string) === 'ALLIED_STAFF').length;
     const admins = staffList.filter(u => u.role === 'ADMIN').length;
-
     return { total, onDutyCount, doctors, nurses, pharmacists, allied, admins };
   }, [staffList]);
 
   // Filtered staff members
   const filteredStaff = useMemo(() => {
     return staffList.filter(staff => {
-      // Role filter
       if (roleFilter !== 'ALL') {
         if (roleFilter === 'OTHER_STAFF') {
           if (staff.role !== 'OTHER_STAFF' && (staff.role as string) !== 'ALLIED_STAFF') return false;
@@ -176,21 +233,37 @@ export default function AdminPage() {
           return false;
         }
       }
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (staffSearchQuery.trim()) {
+        const q = staffSearchQuery.toLowerCase();
         const matchName = staff.name?.toLowerCase().includes(q);
         const matchBadge = staff.staffId?.toLowerCase().includes(q);
         const matchDept = staff.department?.toLowerCase().includes(q);
         const matchLicense = staff.licenseNumber?.toLowerCase().includes(q);
         const matchTitle = staff.title?.toLowerCase().includes(q);
-        if (!matchName && !matchBadge && !matchDept && !matchLicense && !matchTitle) {
-          return false;
-        }
+        if (!matchName && !matchBadge && !matchDept && !matchLicense && !matchTitle) return false;
       }
       return true;
     });
-  }, [staffList, roleFilter, searchQuery]);
+  }, [staffList, roleFilter, staffSearchQuery]);
+
+  // Filtered patients
+  const filteredPatients = useMemo(() => {
+    return patientsList.filter(patient => {
+      if (patientFilter === 'STAT' && !patient.prescriptions?.some((p: any) => p.isStatOrder)) return false;
+      if (patientFilter === 'ISOLATION' && !patient.isolationStatus) return false;
+      if (patientFilter === 'NPO' && !patient.npoStatus) return false;
+
+      if (patientSearchQuery.trim()) {
+        const q = patientSearchQuery.toLowerCase();
+        const matchName = patient.name?.toLowerCase().includes(q);
+        const matchMrn = patient.mrn?.toLowerCase().includes(q);
+        const matchBed = patient.bed?.toLowerCase().includes(q);
+        const matchDx = patient.admissionDiagnosis?.toLowerCase().includes(q);
+        if (!matchName && !matchMrn && !matchBed && !matchDx) return false;
+      }
+      return true;
+    });
+  }, [patientsList, patientFilter, patientSearchQuery]);
 
   return (
     <div style={{
@@ -215,7 +288,6 @@ export default function AdminPage() {
         zIndex: 50,
         boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
       }}>
-        {/* Brand & Subtitle */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
             width: 38,
@@ -249,14 +321,12 @@ export default function AdminPage() {
               </span>
             </div>
             <div style={{ fontSize: 11, color: '#64748b' }}>
-              Hospital Staff Enrollment &amp; Clinical Directory Control Portal
+              Hospital Personnel Enrollment &amp; Inpatient Clinical Directory Control Portal
             </div>
           </div>
         </div>
 
-        {/* Right Actions: eMAR Link & Admin User Pill */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {/* Enter SmartMedChart eMAR Button */}
           <button
             onClick={() => navigate('/patients')}
             style={{
@@ -271,17 +341,13 @@ export default function AdminPage() {
               fontSize: 12,
               fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(11, 77, 162, 0.25)',
-              transition: 'all 0.15s'
+              boxShadow: '0 2px 6px rgba(11, 77, 162, 0.25)'
             }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#093f85')}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#0b4da2')}
           >
             <ExternalLink size={14} />
             <span>Enter SmartMedChart eMAR</span>
           </button>
 
-          {/* User Profile Pill */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -307,18 +373,7 @@ export default function AdminPage() {
             <button
               onClick={() => logout().then(() => navigate('/login'))}
               title="Sign Out"
-              style={{
-                marginLeft: 4,
-                background: 'none',
-                border: 'none',
-                color: '#64748b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                padding: 4
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.color = '#ef4444')}
-              onMouseOut={(e) => (e.currentTarget.style.color = '#64748b')}
+              style={{ marginLeft: 4, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4 }}
             >
               <LogOut size={15} />
             </button>
@@ -342,7 +397,9 @@ export default function AdminPage() {
           justifyContent: 'space-between',
           marginBottom: 24,
           boxShadow: '0 10px 25px -5px rgba(12, 26, 48, 0.3)',
-          border: '1px solid rgba(255, 255, 255, 0.08)'
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          flexWrap: 'wrap',
+          gap: 16
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -367,31 +424,17 @@ export default function AdminPage() {
               Welcome, {currentUser?.name || 'Dr. Evelyn Vance, MD'}
             </h1>
             <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, maxWidth: 620, lineHeight: 1.5 }}>
-              Authorize, credential, and onboard new hospital doctors, nurses, pharmacists, and allied diagnostic staff into the hospital's central clinical directory.
+              Authorize, credential, and onboard new hospital doctors, nurses, and staff — and inspect admitted inpatients with real-time eMAR chart synchronizations.
             </p>
           </div>
 
-          {/* 4 Fast Enrollment Buttons in Banner */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button
               onClick={() => handleOpenEnrollModal('DOCTOR')}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '9px 15px',
-                borderRadius: 9,
-                backgroundColor: '#ffffff',
-                color: '#0b4da2',
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-                transition: 'all 0.15s'
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9,
+                backgroundColor: '#ffffff', color: '#0b4da2', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer'
               }}
-              onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
-              onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
             >
               <UserPlus size={15} />
               <span>Enroll Doctor</span>
@@ -400,22 +443,9 @@ export default function AdminPage() {
             <button
               onClick={() => handleOpenEnrollModal('NURSE')}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '9px 15px',
-                borderRadius: 9,
-                backgroundColor: '#10b981',
-                color: '#ffffff',
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
-                transition: 'all 0.15s'
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9,
+                backgroundColor: '#10b981', color: '#ffffff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer'
               }}
-              onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
-              onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
             >
               <Plus size={15} />
               <span>Enroll Nurse</span>
@@ -424,50 +454,24 @@ export default function AdminPage() {
             <button
               onClick={() => handleOpenEnrollModal('PHARMACIST')}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '9px 15px',
-                borderRadius: 9,
-                backgroundColor: '#0d9488',
-                color: '#ffffff',
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(13, 148, 136, 0.3)',
-                transition: 'all 0.15s'
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9,
+                backgroundColor: '#0d9488', color: '#ffffff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer'
               }}
-              onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
-              onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
             >
               <Plus size={15} />
               <span>Enroll Pharmacist</span>
             </button>
 
             <button
-              onClick={() => handleOpenEnrollModal('OTHER_STAFF')}
+              onClick={() => setShowAdmitPatientModal(true)}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '9px 15px',
-                borderRadius: 9,
-                backgroundColor: '#7c3aed',
-                backgroundImage: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)',
-                color: '#ffffff',
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)',
-                transition: 'all 0.15s'
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9,
+                backgroundColor: '#0284c7', color: '#ffffff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.35)'
               }}
-              onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
-              onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
             >
-              <FlaskConical size={15} />
-              <span>BIOMEDICAL &bull; Other Staff</span>
+              <Heart size={15} />
+              <span>+ Admit Inpatient</span>
             </button>
           </div>
         </div>
@@ -482,469 +486,246 @@ export default function AdminPage() {
           marginBottom: 24
         }}>
           {/* Total Staff */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: 12,
-            padding: '16px 18px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-          }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>TOTAL STAFF</span>
               <User size={15} color="#64748b" />
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
-              {stats.total}
+              {staffStats.total}
             </div>
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              fontSize: 11,
-              fontWeight: 700,
-              color: '#16a34a',
-              backgroundColor: '#f0fdf4',
-              padding: '2px 8px',
-              borderRadius: 6
-            }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#16a34a', backgroundColor: '#f0fdf4', padding: '2px 8px', borderRadius: 6 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#16a34a' }} />
-              {stats.onDutyCount} On Duty
+              {staffStats.onDutyCount} On Duty
             </div>
           </div>
 
           {/* Doctors */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: 12,
-            padding: '16px 18px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-          }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>DOCTORS</span>
               <Stethoscope size={15} color="#2563eb" />
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#2563eb', marginBottom: 6 }}>
-              {stats.doctors}
+              {staffStats.doctors}
             </div>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>
-              Active Prescribers
-            </div>
+            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>Active Prescribers</div>
           </div>
 
           {/* Nurses */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: 12,
-            padding: '16px 18px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-          }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>NURSES (RN)</span>
               <HeartPulse size={15} color="#10b981" />
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', marginBottom: 6 }}>
-              {stats.nurses}
+              {staffStats.nurses}
             </div>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>
-              eMAR Verified
-            </div>
+            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>eMAR Verified</div>
           </div>
 
           {/* Pharmacists */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: 12,
-            padding: '16px 18px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-          }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>PHARMACISTS</span>
               <Pill size={15} color="#0d9488" />
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#0d9488', marginBottom: 6 }}>
-              {stats.pharmacists}
+              {staffStats.pharmacists}
             </div>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>
-              Dispensary Leads
-            </div>
+            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>Dispensary Leads</div>
           </div>
 
-          {/* Allied / Biomedical */}
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: 12,
-            padding: '16px 18px',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-          }}>
+          {/* Allied Staff */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>ALLIED / BIOMED</span>
               <FlaskConical size={15} color="#7c3aed" />
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#7c3aed', marginBottom: 6 }}>
-              {stats.allied}
+              {staffStats.allied}
             </div>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>
-              Lab &amp; Diagnostics
-            </div>
+            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500 }}>Lab &amp; Diagnostics</div>
           </div>
 
-          {/* Bed Capacity */}
+          {/* Inpatients / Bed Capacity */}
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>ADMITTED INPATIENTS</span>
+              <Heart size={15} color="#0284c7" />
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#0284c7', marginBottom: 6 }}>
+              {patientsList.length} Beds
+            </div>
+            <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>
+              Ward 4B Active Roster
+            </div>
+          </div>
+        </div>
+
+        {/* ======================================================== */}
+        {/* 4. DIRECTORY TABS: STAFF vs PATIENTS                     */}
+        {/* ======================================================== */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button
+            onClick={() => setDirectoryView('STAFF')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 20px',
+              borderRadius: 12,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 800,
+              backgroundColor: directoryView === 'STAFF' ? '#0b4da2' : '#ffffff',
+              color: directoryView === 'STAFF' ? '#ffffff' : '#475569',
+              boxShadow: directoryView === 'STAFF' ? '0 4px 12px rgba(11, 77, 162, 0.25)' : '0 1px 3px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Users size={16} />
+            <span>Hospital Personnel &amp; Staff ({staffStats.total})</span>
+          </button>
+
+          <button
+            onClick={() => setDirectoryView('PATIENTS')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 20px',
+              borderRadius: 12,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 800,
+              backgroundColor: directoryView === 'PATIENTS' ? '#0b4da2' : '#ffffff',
+              color: directoryView === 'PATIENTS' ? '#ffffff' : '#475569',
+              boxShadow: directoryView === 'PATIENTS' ? '0 4px 12px rgba(11, 77, 162, 0.25)' : '0 1px 3px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Heart size={16} />
+            <span>Admitted Inpatients &amp; Clinical Roster ({patientsList.length})</span>
+          </button>
+        </div>
+
+        {/* ======================================================== */}
+        {/* 5A. VIEW A: HOSPITAL PERSONNEL & STAFF DIRECTORY         */}
+        {/* ======================================================== */}
+        {directoryView === 'STAFF' && (
           <div style={{
             backgroundColor: '#ffffff',
-            borderRadius: 12,
-            padding: '16px 18px',
+            borderRadius: 16,
             border: '1px solid #e2e8f0',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+            boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+            overflow: 'hidden'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>BED CAPACITY</span>
-              <Building2 size={15} color="#f59e0b" />
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 6 }}>
-              28/32
-            </div>
-            <div style={{ fontSize: 11, color: '#d97706', fontWeight: 700 }}>
-              87.5% Occupancy
-            </div>
-          </div>
-        </div>
-
-        {/* ======================================================== */}
-        {/* 4. FOUR ENROLLMENT QUICK ACTION CARDS                    */}
-        {/* ======================================================== */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
-          marginBottom: 28
-        }}>
-          {/* Card 1: Doctor */}
-          <div
-            onClick={() => handleOpenEnrollModal('DOCTOR')}
-            style={{
-              backgroundColor: '#f0f7ff',
-              border: '1px solid #bfdbfe',
-              borderRadius: 14,
-              padding: '18px 20px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.borderColor = '#2563eb')}
-            onMouseOut={(e) => (e.currentTarget.style.borderColor = '#bfdbfe')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                backgroundColor: '#2563eb',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff'
-              }}>
-                <Stethoscope size={18} />
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                    Hospital Personnel &amp; Staff Directory
+                  </h2>
+                  <span style={{ backgroundColor: '#f1f5f9', color: '#475569', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 9999 }}>
+                    {filteredStaff.length} Members
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0' }}>
+                  Manage active clinicians, toggle shift statuses, inspect digital badges, or launch workstation as staff.
+                </p>
               </div>
-              <ChevronRight size={18} color="#2563eb" />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>
-              Enroll Doctor
-            </div>
-            <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.45, marginBottom: 14 }}>
-              Medical license (GMC/NPI), specialty, e-prescribing clearance, and badge.
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }}>
-              Add Physician <span>&oplus;</span>
-            </div>
-          </div>
 
-          {/* Card 2: Nurse */}
-          <div
-            onClick={() => handleOpenEnrollModal('NURSE')}
-            style={{
-              backgroundColor: '#f0fdf4',
-              border: '1px solid #bbf7d0',
-              borderRadius: 14,
-              padding: '18px 20px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.borderColor = '#16a34a')}
-            onMouseOut={(e) => (e.currentTarget.style.borderColor = '#bbf7d0')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                backgroundColor: '#16a34a',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff'
-              }}>
-                <HeartPulse size={18} />
-              </div>
-              <ChevronRight size={18} color="#16a34a" />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>
-              Enroll Nurse / RN
-            </div>
-            <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.45, marginBottom: 14 }}>
-              Nursing license, shift schedule, ward assignment, and 5-rights admin rights.
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', display: 'flex', alignItems: 'center', gap: 4 }}>
-              Add Nursing Staff <span>&oplus;</span>
-            </div>
-          </div>
-
-          {/* Card 3: Pharmacist */}
-          <div
-            onClick={() => handleOpenEnrollModal('PHARMACIST')}
-            style={{
-              backgroundColor: '#f0fdfa',
-              border: '1px solid #99f6e4',
-              borderRadius: 14,
-              padding: '18px 20px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.borderColor = '#0d9488')}
-            onMouseOut={(e) => (e.currentTarget.style.borderColor = '#99f6e4')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                backgroundColor: '#0d9488',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff'
-              }}>
-                <Pill size={18} />
-              </div>
-              <ChevronRight size={18} color="#0d9488" />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>
-              Enroll Pharmacist
-            </div>
-            <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.45, marginBottom: 14 }}>
-              Pharmacy board (RPh), dispensary vault access, and verification clearance.
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#0d9488', display: 'flex', alignItems: 'center', gap: 4 }}>
-              Add Pharmacist <span>&oplus;</span>
-            </div>
-          </div>
-
-          {/* Card 4: Other Staff / Biomedical */}
-          <div
-            onClick={() => handleOpenEnrollModal('OTHER_STAFF')}
-            style={{
-              backgroundColor: '#faf5ff',
-              border: '1px solid #e9d5ff',
-              borderRadius: 14,
-              padding: '18px 20px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.borderColor = '#9333ea')}
-            onMouseOut={(e) => (e.currentTarget.style.borderColor = '#e9d5ff')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: 9,
-                backgroundColor: '#9333ea',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff'
-              }}>
-                <FlaskConical size={18} />
-              </div>
-              <ChevronRight size={18} color="#9333ea" />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>
-              Enroll Other Staff
-            </div>
-            <div style={{ fontSize: 11, color: '#475569', lineHeight: 1.45, marginBottom: 14 }}>
-              Lab technologists, radiographers, phlebotomists, and ward coordinators.
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#9333ea', display: 'flex', alignItems: 'center', gap: 4 }}>
-              Add Allied Staff <span>&oplus;</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ======================================================== */}
-        {/* 5. HOSPITAL PERSONNEL & STAFF DIRECTORY TABLE            */}
-        {/* ======================================================== */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: 16,
-          border: '1px solid #e2e8f0',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
-          overflow: 'hidden'
-        }}>
-          {/* Section Header */}
-          <div style={{
-            padding: '20px 24px',
-            borderBottom: '1px solid #f1f5f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 12
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                  Hospital Personnel &amp; Staff Directory
-                </h2>
-                <span style={{
-                  backgroundColor: '#f1f5f9',
-                  color: '#475569',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: '3px 10px',
-                  borderRadius: 9999
-                }}>
-                  {filteredStaff.length} Members
-                </span>
-              </div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0' }}>
-                Manage active clinicians, toggle shift statuses, inspect digital badges, or launch workstation as staff.
-              </p>
-            </div>
-
-            <button
-              onClick={() => handleOpenEnrollModal('DOCTOR')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '9px 16px',
-                borderRadius: 9,
-                backgroundColor: '#0b4da2',
-                color: '#ffffff',
-                border: 'none',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(11, 77, 162, 0.25)'
-              }}
-            >
-              <UserPlus size={16} />
-              <span>Enroll New Staff</span>
-            </button>
-          </div>
-
-          {/* Search & Filter Toolbar */}
-          <div style={{
-            padding: '14px 24px',
-            backgroundColor: '#f8fafc',
-            borderBottom: '1px solid #e2e8f0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 14
-          }}>
-            {/* Search Input */}
-            <div style={{ position: 'relative', width: 380, maxWidth: '100%' }}>
-              <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
-                <Search size={16} />
-              </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search staff by name, badge ID, license, or department..."
+              <button
+                onClick={() => handleOpenEnrollModal('DOCTOR')}
                 style={{
-                  width: '100%',
-                  padding: '8px 12px 8px 36px',
-                  fontSize: 12,
-                  border: '1.5px solid #cbd5e1',
-                  borderRadius: 8,
-                  outline: 'none',
-                  backgroundColor: '#ffffff',
-                  boxSizing: 'border-box'
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 9,
+                  backgroundColor: '#0b4da2', color: '#ffffff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(11, 77, 162, 0.25)'
                 }}
-              />
+              >
+                <UserPlus size={16} />
+                <span>Enroll New Staff</span>
+              </button>
             </div>
 
-            {/* Filter Pills */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {[
-                { id: 'ALL', label: `All Staff (${stats.total})` },
-                { id: 'DOCTOR', label: `Doctors (${stats.doctors})` },
-                { id: 'NURSE', label: `Nurses (${stats.nurses})` },
-                { id: 'PHARMACIST', label: `Pharmacists (${stats.pharmacists})` },
-                { id: 'OTHER_STAFF', label: `Allied Staff (${stats.allied})` },
-                { id: 'ADMIN', label: `Admin (${stats.admins})` },
-              ].map((tab) => {
-                const isActive = roleFilter === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setRoleFilter(tab.id as any)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 9999,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      border: '1px solid',
-                      borderColor: isActive ? '#0f172a' : '#e2e8f0',
-                      backgroundColor: isActive ? '#0f172a' : '#ffffff',
-                      color: isActive ? '#ffffff' : '#64748b',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            {/* Toolbar */}
+            <div style={{
+              padding: '14px 24px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14
+            }}>
+              <div style={{ position: 'relative', width: 380, maxWidth: '100%' }}>
+                <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
+                  <Search size={16} />
+                </div>
+                <input
+                  type="text"
+                  value={staffSearchQuery}
+                  onChange={(e) => setStaffSearchQuery(e.target.value)}
+                  placeholder="Search staff by name, badge ID, license, or department..."
+                  style={{ width: '100%', padding: '8px 12px 8px 36px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, outline: 'none', backgroundColor: '#ffffff', boxSizing: 'border-box' }}
+                />
+              </div>
 
-          {/* Directory Table */}
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12 }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em' }}>
-                  <th style={{ padding: '12px 24px' }}>STAFF MEMBER</th>
-                  <th style={{ padding: '12px 18px' }}>ROLE &amp; BADGE ID</th>
-                  <th style={{ padding: '12px 18px' }}>DEPARTMENT &amp; SPECIALTY</th>
-                  <th style={{ padding: '12px 18px' }}>LICENSE / CREDENTIALS</th>
-                  <th style={{ padding: '12px 18px' }}>SHIFT &amp; DUTY STATUS</th>
-                  <th style={{ padding: '12px 24px', textAlign: 'right' }}>ACTIONS &amp; WORKSTATION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
-                      <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px' }} />
-                      <div>Loading hospital directory...</div>
-                    </td>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'ALL', label: `All Staff (${staffStats.total})` },
+                  { id: 'DOCTOR', label: `Doctors (${staffStats.doctors})` },
+                  { id: 'NURSE', label: `Nurses (${staffStats.nurses})` },
+                  { id: 'PHARMACIST', label: `Pharmacists (${staffStats.pharmacists})` },
+                  { id: 'OTHER_STAFF', label: `Allied Staff (${staffStats.allied})` },
+                  { id: 'ADMIN', label: `Admin (${staffStats.admins})` },
+                ].map((tab) => {
+                  const isActive = roleFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setRoleFilter(tab.id as any)}
+                      style={{
+                        padding: '6px 12px', borderRadius: 9999, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                        border: '1px solid', borderColor: isActive ? '#0f172a' : '#e2e8f0',
+                        backgroundColor: isActive ? '#0f172a' : '#ffffff', color: isActive ? '#ffffff' : '#64748b'
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em' }}>
+                    <th style={{ padding: '12px 24px' }}>STAFF MEMBER</th>
+                    <th style={{ padding: '12px 18px' }}>ROLE &amp; BADGE ID</th>
+                    <th style={{ padding: '12px 18px' }}>DEPARTMENT &amp; SPECIALTY</th>
+                    <th style={{ padding: '12px 18px' }}>LICENSE / CREDENTIALS</th>
+                    <th style={{ padding: '12px 18px' }}>SHIFT &amp; DUTY STATUS</th>
+                    <th style={{ padding: '12px 24px', textAlign: 'right' }}>ACTIONS &amp; WORKSTATION</th>
                   </tr>
-                ) : filteredStaff.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
-                      <AlertCircle size={24} style={{ margin: '0 auto 8px', color: '#94a3b8' }} />
-                      <div style={{ fontWeight: 600 }}>No personnel matching filter criteria.</div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredStaff.map((staff, idx) => {
+                </thead>
+                <tbody>
+                  {isStaffLoading ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                        <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px' }} />
+                        <div>Loading hospital staff directory...</div>
+                      </td>
+                    </tr>
+                  ) : filteredStaff.map((staff, idx) => {
                     const isDoc = staff.role === 'DOCTOR';
                     const isNurse = staff.role === 'NURSE';
                     const isPharm = staff.role === 'PHARMACIST';
@@ -954,251 +735,74 @@ export default function AdminPage() {
                     return (
                       <tr
                         key={staff.id || staff.staffId}
-                        style={{
-                          borderBottom: '1px solid #f1f5f9',
-                          backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafafa',
-                          transition: 'background-color 0.15s'
-                        }}
-                        onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-                        onMouseOut={(e) => (e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#ffffff' : '#fafafa')}
+                        style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}
                       >
-                        {/* 1. Staff Member */}
                         <td style={{ padding: '14px 24px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                             <img
                               src={staff.avatarUrl || `https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150`}
                               alt={staff.name}
-                              style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: '50%',
-                                objectFit: 'cover',
-                                border: '1.5px solid #e2e8f0',
-                                flexShrink: 0
-                              }}
+                              style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid #e2e8f0', flexShrink: 0 }}
                             />
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
-                                {staff.name}
-                              </div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>
-                                {staff.title || staff.role}
-                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{staff.name}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>{staff.title || staff.role}</div>
                             </div>
                           </div>
                         </td>
 
-                        {/* 2. Role & Badge ID */}
                         <td style={{ padding: '14px 18px' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
-                            {isDoc && (
-                              <span style={{
-                                backgroundColor: '#eff6ff',
-                                color: '#1d4ed8',
-                                border: '1px solid #bfdbfe',
-                                fontSize: 10,
-                                fontWeight: 800,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}>
-                                <Stethoscope size={11} /> DOCTOR
-                              </span>
-                            )}
-                            {isNurse && (
-                              <span style={{
-                                backgroundColor: '#f0fdf4',
-                                color: '#15803d',
-                                border: '1px solid #bbf7d0',
-                                fontSize: 10,
-                                fontWeight: 800,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}>
-                                <HeartPulse size={11} /> NURSE
-                              </span>
-                            )}
-                            {isPharm && (
-                              <span style={{
-                                backgroundColor: '#f0fdfa',
-                                color: '#0f766e',
-                                border: '1px solid #99f6e4',
-                                fontSize: 10,
-                                fontWeight: 800,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}>
-                                <Pill size={11} /> PHARMACIST
-                              </span>
-                            )}
-                            {isAllied && (
-                              <span style={{
-                                backgroundColor: '#faf5ff',
-                                color: '#7e22ce',
-                                border: '1px solid #e9d5ff',
-                                fontSize: 10,
-                                fontWeight: 800,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}>
-                                <FlaskConical size={11} /> BIOMEDICAL
-                              </span>
-                            )}
-                            {isAdmin && (
-                              <span style={{
-                                backgroundColor: '#0f172a',
-                                color: '#ffffff',
-                                fontSize: 10,
-                                fontWeight: 800,
-                                padding: '2px 7px',
-                                borderRadius: 6,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4
-                              }}>
-                                <Shield size={11} /> ADMIN
-                              </span>
-                            )}
+                            {isDoc && <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6 }}><Stethoscope size={11} /> DOCTOR</span>}
+                            {isNurse && <span style={{ backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6 }}><HeartPulse size={11} /> NURSE</span>}
+                            {isPharm && <span style={{ backgroundColor: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6 }}><Pill size={11} /> PHARMACIST</span>}
+                            {isAllied && <span style={{ backgroundColor: '#faf5ff', color: '#7e22ce', border: '1px solid #e9d5ff', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6 }}><FlaskConical size={11} /> BIOMEDICAL</span>}
+                            {isAdmin && <span style={{ backgroundColor: '#0f172a', color: '#ffffff', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 6 }}><Shield size={11} /> ADMIN</span>}
                           </div>
-                          <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#64748b', fontWeight: 600 }}>
-                            {staff.staffId}
-                          </div>
+                          <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#64748b', fontWeight: 600 }}>{staff.staffId}</div>
                         </td>
 
-                        {/* 3. Department & Specialty */}
                         <td style={{ padding: '14px 18px' }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
-                            {staff.department || 'Ward 4B ICU'}
-                          </div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>
-                            {staff.specialty || 'General Care & eMAR'}
-                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{staff.department || 'Ward 4B ICU'}</div>
+                          <div style={{ fontSize: 11, color: '#64748b' }}>{staff.specialty || 'General Care & eMAR'}</div>
                         </td>
 
-                        {/* 4. License / Credentials */}
                         <td style={{ padding: '14px 18px' }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>
-                            {staff.licenseNumber || 'VERIFIED-ACTIVE'}
-                          </div>
-                          <div style={{ fontSize: 10, color: '#94a3b8' }}>
-                            PIN: &bull;&bull;&bull;&bull;
-                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>{staff.licenseNumber || 'VERIFIED-ACTIVE'}</div>
+                          <div style={{ fontSize: 10, color: '#94a3b8' }}>PIN: &bull;&bull;&bull;&bull;</div>
                         </td>
 
-                        {/* 5. Shift & Duty Status */}
                         <td style={{ padding: '14px 18px' }}>
                           <button
                             onClick={() => dutyMutation.mutate(staff.id)}
-                            title="Click to toggle Shift Duty"
-                            style={{
-                              border: 'none',
-                              background: 'none',
-                              padding: 0,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              marginBottom: 3
-                            }}
+                            style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 3 }}
                           >
                             {staff.onDuty ? (
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                fontSize: 11,
-                                fontWeight: 800,
-                                color: '#16a34a',
-                                backgroundColor: '#f0fdf4',
-                                border: '1px solid #bbf7d0',
-                                padding: '2px 8px',
-                                borderRadius: 9999
-                              }}>
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#16a34a' }} />
-                                ON DUTY
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800, color: '#16a34a', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: 9999 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#16a34a' }} /> ON DUTY
                               </span>
                             ) : (
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 5,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: '#64748b',
-                                backgroundColor: '#f1f5f9',
-                                border: '1px solid #cbd5e1',
-                                padding: '2px 8px',
-                                borderRadius: 9999
-                              }}>
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#94a3b8' }} />
-                                ACTIVE (OFF-DUTY)
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', padding: '2px 8px', borderRadius: 9999 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#94a3b8' }} /> ACTIVE (OFF-DUTY)
                               </span>
                             )}
                           </button>
-                          <div style={{ fontSize: 10, color: '#64748b' }}>
-                            Shift: {staff.shiftType || 'MORNING'}
-                          </div>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>Shift: {staff.shiftType || 'MORNING'}</div>
                         </td>
 
-                        {/* 6. Actions & Workstation */}
                         <td style={{ padding: '14px 24px', textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            {/* Log In As Clinician Button */}
                             <button
-                              onClick={() => handleImpersonate(staff)}
-                              title={`Log in as ${staff.name}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                padding: '6px 12px',
-                                borderRadius: 7,
-                                backgroundColor: '#eff6ff',
-                                color: '#1d4ed8',
-                                border: '1px solid #bfdbfe',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s'
-                              }}
-                              onMouseOver={(e) => {
-                                e.currentTarget.style.backgroundColor = '#1d4ed8';
-                                e.currentTarget.style.color = '#ffffff';
-                              }}
-                              onMouseOut={(e) => {
-                                e.currentTarget.style.backgroundColor = '#eff6ff';
-                                e.currentTarget.style.color = '#1d4ed8';
-                              }}
+                              onClick={() => handleImpersonateStaff(staff)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
                             >
                               <LogIn size={13} />
                               <span>Log In As</span>
                             </button>
 
-                            {/* View Badge */}
                             <button
                               onClick={() => setBadgeModalUser(staff)}
-                              title="Inspect Hospital Digital Badge"
-                              style={{
-                                padding: 6,
-                                borderRadius: 7,
-                                border: '1px solid #e2e8f0',
-                                backgroundColor: '#ffffff',
-                                color: '#64748b',
-                                cursor: 'pointer'
-                              }}
-                              onMouseOver={(e) => (e.currentTarget.style.color = '#0f172a')}
-                              onMouseOut={(e) => (e.currentTarget.style.color = '#64748b')}
+                              style={{ padding: 6, borderRadius: 7, border: '1px solid #e2e8f0', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}
                             >
                               <QrCode size={15} />
                             </button>
@@ -1206,344 +810,343 @@ export default function AdminPage() {
                         </td>
                       </tr>
                     );
-                  })
-                )}
-              </tbody>
-            </table>
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </main>
+        )}
 
-      {/* ======================================================== */}
-      {/* 6. ENROLL NEW STAFF MODAL                                */}
-      {/* ======================================================== */}
-      {showEnrollModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: 20
-        }}>
+        {/* ======================================================== */}
+        {/* 5B. VIEW B: ADMITTED INPATIENTS & CLINICAL ROSTER        */}
+        {/* ======================================================== */}
+        {directoryView === 'PATIENTS' && (
           <div style={{
             backgroundColor: '#ffffff',
-            borderRadius: 18,
-            width: '100%',
-            maxWidth: 620,
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)',
-            overflow: 'hidden',
-            border: '1px solid #e2e8f0'
+            borderRadius: 16,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+            overflow: 'hidden'
           }}>
-            {/* Modal Header */}
             <div style={{
               padding: '20px 24px',
               borderBottom: '1px solid #f1f5f9',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              backgroundColor: '#f8fafc'
+              flexWrap: 'wrap',
+              gap: 12
             }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                    Admitted Hospital Inpatients &amp; Clinical Roster
+                  </h2>
+                  <span style={{ backgroundColor: '#eff6ff', color: '#0b4da2', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 9999 }}>
+                    {filteredPatients.length} Active Patients
+                  </span>
+                </div>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0' }}>
+                  Monitor admitted inpatient beds, verified allergies, active prescriptions, and inspect patient portal charts.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowAdmitPatientModal(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 9,
+                  backgroundColor: '#0284c7', color: '#ffffff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)'
+                }}
+              >
+                <Plus size={16} />
+                <span>Admit New Patient</span>
+              </button>
+            </div>
+
+            {/* Toolbar */}
+            <div style={{
+              padding: '14px 24px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14
+            }}>
+              <div style={{ position: 'relative', width: 380, maxWidth: '100%' }}>
+                <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
+                  <Search size={16} />
+                </div>
+                <input
+                  type="text"
+                  value={patientSearchQuery}
+                  onChange={(e) => setPatientSearchQuery(e.target.value)}
+                  placeholder="Search inpatients by name, MRN, bed, or diagnosis..."
+                  style={{ width: '100%', padding: '8px 12px 8px 36px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, outline: 'none', backgroundColor: '#ffffff', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'ALL', label: `All Inpatients (${patientsList.length})` },
+                  { id: 'STAT', label: `STAT Orders (${patientsList.filter((p: any) => p.prescriptions?.some((rx: any) => rx.isStatOrder)).length})` },
+                  { id: 'ISOLATION', label: `Isolation (${patientsList.filter((p: any) => p.isolationStatus).length})` },
+                  { id: 'NPO', label: `NPO Active (${patientsList.filter((p: any) => p.npoStatus).length})` },
+                ].map((tab) => {
+                  const isActive = patientFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setPatientFilter(tab.id as any)}
+                      style={{
+                        padding: '6px 12px', borderRadius: 9999, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                        border: '1px solid', borderColor: isActive ? '#0b4da2' : '#e2e8f0',
+                        backgroundColor: isActive ? '#0b4da2' : '#ffffff', color: isActive ? '#ffffff' : '#64748b'
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: 10, fontWeight: 800, letterSpacing: '0.06em' }}>
+                    <th style={{ padding: '12px 24px' }}>PATIENT &amp; BED</th>
+                    <th style={{ padding: '12px 18px' }}>MRN &amp; CODE STATUS</th>
+                    <th style={{ padding: '12px 18px' }}>ATTENDING &amp; ADMISSION DX</th>
+                    <th style={{ padding: '12px 18px' }}>SAFETY &amp; ALLERGIES</th>
+                    <th style={{ padding: '12px 18px' }}>MEDICATION SCHEDULE</th>
+                    <th style={{ padding: '12px 24px', textAlign: 'right' }}>ACTIONS &amp; WORKSTATION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isPatientsLoading ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                        <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px' }} />
+                        <div>Loading hospital inpatients directory...</div>
+                      </td>
+                    </tr>
+                  ) : filteredPatients.map((patient, idx) => {
+                    const initials = patient.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2);
+                    const age = patient.dob ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 24 * 3600 * 1000)) : 45;
+                    const allergyText = patient.allergies?.[0]?.allergen || 'NKDA';
+                    const hasSevere = patient.allergies?.length > 0;
+                    const rxCount = patient.prescriptions?.length || 0;
+                    const hasStat = patient.prescriptions?.some((p: any) => p.isStatOrder);
+
+                    return (
+                      <tr
+                        key={patient.id}
+                        style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}
+                      >
+                        {/* 1. Patient & Bed */}
+                        <td style={{ padding: '14px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{
+                              width: 38, height: 38, borderRadius: 10,
+                              backgroundColor: '#0b4da2', color: '#ffffff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 13, fontWeight: 800, flexShrink: 0
+                            }}>
+                              {initials}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{patient.name}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>
+                                {age}y &bull; {patient.sex} &bull; {patient.weight}kg &bull; <strong style={{ color: '#0b4da2' }}>{patient.bed || 'ICU'}</strong>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. MRN & Code Status */}
+                        <td style={{ padding: '14px 18px' }}>
+                          <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                            {patient.mrn}
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 9, fontWeight: 800, backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '1px 6px', borderRadius: 4 }}>
+                              {patient.codeStatus || 'FULL CODE'}
+                            </span>
+                            {patient.npoStatus && (
+                              <span style={{ fontSize: 9, fontWeight: 800, backgroundColor: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', padding: '1px 6px', borderRadius: 4 }}>
+                                NPO
+                              </span>
+                            )}
+                            {patient.isolationStatus && (
+                              <span style={{ fontSize: 9, fontWeight: 800, backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '1px 6px', borderRadius: 4 }}>
+                                ISOLATION
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 3. Attending & Diagnosis */}
+                        <td style={{ padding: '14px 18px' }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                            Dr. V. Sharma, MD
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748b', maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {patient.admissionDiagnosis || 'Acute Inpatient Care'}
+                          </div>
+                        </td>
+
+                        {/* 4. Safety & Allergies */}
+                        <td style={{ padding: '14px 18px' }}>
+                          {hasSevere ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+                              <AlertTriangle size={11} />
+                              <span>{allergyText}</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#16a34a', fontSize: 11, fontWeight: 600 }}>No Known Allergies</span>
+                          )}
+                          <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>
+                            eGFR: {patient.eGFR || 62} mL/min (Renal Safe)
+                          </div>
+                        </td>
+
+                        {/* 5. Medication Schedule */}
+                        <td style={{ padding: '14px 18px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#0b4da2' }}>{rxCount} Orders Active</span>
+                            {hasStat && (
+                              <span style={{ fontSize: 9, fontWeight: 800, backgroundColor: '#dc2626', color: '#ffffff', padding: '1px 5px', borderRadius: 3 }}>
+                                STAT DUE
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>
+                            Ward 4B ICU eMAR Synchronized
+                          </div>
+                        </td>
+
+                        {/* 6. Actions */}
+                        <td style={{ padding: '14px 24px', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {/* Open eMAR Bedside */}
+                            <button
+                              onClick={() => navigate(`/patients/${patient.id}`)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 7, backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              <ExternalLink size={12} />
+                              <span>Open eMAR</span>
+                            </button>
+
+                            {/* Log In As Patient */}
+                            <button
+                              onClick={() => handleImpersonatePatient(patient)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 7, backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              <Heart size={12} />
+                              <span>View MyChart</span>
+                            </button>
+
+                            {/* Digital Wristband */}
+                            <button
+                              onClick={() => setWristbandModalPatient(patient)}
+                              style={{ padding: 6, borderRadius: 7, border: '1px solid #e2e8f0', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}
+                            >
+                              <QrCode size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* ======================================================== */}
+      {/* 6. ENROLL NEW STAFF MODAL                                */}
+      {/* ======================================================== */}
+      {showEnrollStaffModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20
+        }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 18, width: '100%', maxWidth: 620, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f8fafc' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <UserPlus size={18} color="#0b4da2" />
-                  <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                    Enroll New Hospital Personnel
-                  </h3>
+                  <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>Enroll Hospital Personnel</h3>
                 </div>
-                <p style={{ fontSize: 11, color: '#64748b', margin: '3px 0 0' }}>
-                  Register clinical credentials, assign ward privileges, and generate eMAR badging.
-                </p>
+                <p style={{ fontSize: 11, color: '#64748b', margin: '3px 0 0' }}>Register credentials, assign ward privileges, and generate eMAR badging.</p>
               </div>
-              <button
-                onClick={() => setShowEnrollModal(false)}
-                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
-              >
+              <button onClick={() => setShowEnrollStaffModal(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}>
                 <X size={20} />
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              enrollMutation.mutate(enrollForm);
-            }}>
+            <form onSubmit={(e) => { e.preventDefault(); enrollMutation.mutate(enrollForm); }}>
               <div style={{ padding: '20px 24px', maxHeight: '72vh', overflowY: 'auto' }}>
-                {/* Role Tabs inside Modal */}
-                <div style={{ marginBottom: 18 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>
-                    SELECT CLINICAL ROLE CATEGORY:
-                  </label>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#475569', marginBottom: 6 }}>ROLE CATEGORY:</label>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                     {[
                       { role: 'DOCTOR', label: 'Doctor / MD', icon: Stethoscope },
                       { role: 'NURSE', label: 'Nurse / RN', icon: HeartPulse },
                       { role: 'PHARMACIST', label: 'Pharmacist', icon: Pill },
-                      { role: 'OTHER_STAFF', label: 'Biomedical / Allied', icon: FlaskConical },
+                      { role: 'ALLIED_STAFF', label: 'Biomedical', icon: FlaskConical },
                     ].map(({ role, label, icon: Icon }) => (
                       <button
                         key={role}
                         type="button"
                         onClick={() => resetEnrollForm(role)}
                         style={{
-                          padding: '10px 8px',
-                          borderRadius: 8,
+                          padding: '10px 8px', borderRadius: 8,
                           border: `1.5px solid ${enrollForm.role === role ? '#0b4da2' : '#e2e8f0'}`,
                           backgroundColor: enrollForm.role === role ? '#eff6ff' : '#ffffff',
-                          cursor: 'pointer',
-                          textAlign: 'center'
+                          cursor: 'pointer', textAlign: 'center'
                         }}
                       >
                         <Icon size={16} color={enrollForm.role === role ? '#0b4da2' : '#64748b'} style={{ margin: '0 auto 4px' }} />
-                        <div style={{ fontSize: 11, fontWeight: 700, color: enrollForm.role === role ? '#0b4da2' : '#334155' }}>
-                          {label}
-                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: enrollForm.role === role ? '#0b4da2' : '#334155' }}>{label}</div>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Form Fields Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  {/* Full Name */}
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      Full Name &amp; Degree Title *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Dr. Julian Croft, MD"
-                      value={enrollForm.name}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, name: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        boxSizing: 'border-box'
-                      }}
-                    />
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Full Name &amp; Degree *</label>
+                    <input type="text" required value={enrollForm.name} onChange={(e) => setEnrollForm({ ...enrollForm, name: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
                   </div>
-
-                  {/* Staff ID / Badge */}
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      Hospital Badge ID *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={enrollForm.staffId}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, staffId: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        fontFamily: 'monospace',
-                        boxSizing: 'border-box'
-                      }}
-                    />
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Badge ID *</label>
+                    <input type="text" required value={enrollForm.staffId} onChange={(e) => setEnrollForm({ ...enrollForm, staffId: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, fontFamily: 'monospace', boxSizing: 'border-box' }} />
                   </div>
-
-                  {/* SSO Email */}
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      Hospital SSO Email Address *
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="e.g. jcroft.md@metrohealth.org"
-                      value={enrollForm.email}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, email: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        boxSizing: 'border-box'
-                      }}
-                    />
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Hospital Email *</label>
+                    <input type="email" required value={enrollForm.email} onChange={(e) => setEnrollForm({ ...enrollForm, email: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
                   </div>
-
-                  {/* Medical License # */}
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      State / GMC License Number *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={enrollForm.licenseNumber}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, licenseNumber: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        fontFamily: 'monospace',
-                        boxSizing: 'border-box'
-                      }}
-                    />
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>License Number *</label>
+                    <input type="text" required value={enrollForm.licenseNumber} onChange={(e) => setEnrollForm({ ...enrollForm, licenseNumber: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, fontFamily: 'monospace', boxSizing: 'border-box' }} />
                   </div>
-
-                  {/* Department */}
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      Hospital Department *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={enrollForm.department}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, department: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        boxSizing: 'border-box'
-                      }}
-                    />
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Department *</label>
+                    <input type="text" required value={enrollForm.department} onChange={(e) => setEnrollForm({ ...enrollForm, department: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
                   </div>
-
-                  {/* Specialty */}
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      Clinical Specialty / Subspecialty
-                    </label>
-                    <input
-                      type="text"
-                      value={enrollForm.specialty}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, specialty: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        boxSizing: 'border-box'
-                      }}
-                    />
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Station PIN (4-Digits)</label>
+                    <input type="text" maxLength={6} value={enrollForm.pin} onChange={(e) => setEnrollForm({ ...enrollForm, pin: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, fontFamily: 'monospace', boxSizing: 'border-box' }} />
                   </div>
-
-                  {/* Shift Type */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      Duty Shift Schedule
-                    </label>
-                    <select
-                      value={enrollForm.shiftType}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, shiftType: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        backgroundColor: '#ffffff',
-                        boxSizing: 'border-box'
-                      }}
-                    >
-                      <option value="MORNING">Morning Shift (07:00 – 15:00)</option>
-                      <option value="EVENING">Evening Shift (15:00 – 23:00)</option>
-                      <option value="NIGHT">Night Shift (23:00 – 07:00)</option>
-                      <option value="ROTATING">Rotating 12h Shift</option>
-                    </select>
-                  </div>
-
-                  {/* Security PIN */}
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
-                      Default Station PIN (4-Digits)
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={enrollForm.pin}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, pin: e.target.value })}
-                      style={{
-                        width: '100%',
-                        padding: '9px 12px',
-                        fontSize: 12,
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: 8,
-                        letterSpacing: '0.15em',
-                        fontFamily: 'monospace',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Duty Toggle */}
-                <div style={{ marginTop: 14 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={enrollForm.onDuty}
-                      onChange={(e) => setEnrollForm({ ...enrollForm, onDuty: e.target.checked })}
-                      style={{ accentColor: '#16a34a' }}
-                    />
-                    <span>Mark as currently <strong>ON DUTY</strong> on hospital roster</span>
-                  </label>
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div style={{
-                padding: '16px 24px',
-                borderTop: '1px solid #f1f5f9',
-                backgroundColor: '#f8fafc',
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 10
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowEnrollModal(false)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 8,
-                    border: '1px solid #cbd5e1',
-                    backgroundColor: '#ffffff',
-                    color: '#475569',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={enrollMutation.isPending}
-                  style={{
-                    padding: '8px 20px',
-                    borderRadius: 8,
-                    border: 'none',
-                    backgroundColor: '#0b4da2',
-                    color: '#ffffff',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 6px rgba(11, 77, 162, 0.25)'
-                  }}
-                >
-                  {enrollMutation.isPending ? 'Enrolling Clinician...' : 'Complete Enrollment & Authorize'}
+              <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" onClick={() => setShowEnrollStaffModal(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #cbd5e1', backgroundColor: '#ffffff', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={enrollMutation.isPending} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', backgroundColor: '#0b4da2', color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  {enrollMutation.isPending ? 'Enrolling...' : 'Complete Staff Enrollment'}
                 </button>
               </div>
             </form>
@@ -1552,117 +1155,143 @@ export default function AdminPage() {
       )}
 
       {/* ======================================================== */}
-      {/* 7. DIGITAL SMART BADGE MODAL                             */}
+      {/* 7. ADMIT NEW INPATIENT MODAL                             */}
+      {/* ======================================================== */}
+      {showAdmitPatientModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20
+        }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 18, width: '100%', maxWidth: 580, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f8fafc' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Heart size={18} color="#0284c7" />
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>Admit New Hospital Inpatient</h3>
+              </div>
+              <button onClick={() => setShowAdmitPatientModal(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); admitMutation.mutate(admitForm); }}>
+              <div style={{ padding: '20px 24px', maxHeight: '72vh', overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Patient Full Name *</label>
+                    <input type="text" required placeholder="e.g. Eleanor Rigby" value={admitForm.name} onChange={(e) => setAdmitForm({ ...admitForm, name: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Medical Record Number (MRN) *</label>
+                    <input type="text" required value={admitForm.mrn} onChange={(e) => setAdmitForm({ ...admitForm, mrn: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Date of Birth *</label>
+                    <input type="date" required value={admitForm.dob} onChange={(e) => setAdmitForm({ ...admitForm, dob: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bed Assignment *</label>
+                    <input type="text" required value={admitForm.bed} onChange={(e) => setAdmitForm({ ...admitForm, bed: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Admission Diagnosis *</label>
+                    <input type="text" required placeholder="e.g. Acute Coronary Syndrome" value={admitForm.admissionDiagnosis} onChange={(e) => setAdmitForm({ ...admitForm, admissionDiagnosis: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Weight (kg)</label>
+                    <input type="number" step="0.1" value={admitForm.weight} onChange={(e) => setAdmitForm({ ...admitForm, weight: parseFloat(e.target.value) })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Code Status</label>
+                    <select value={admitForm.codeStatus} onChange={(e) => setAdmitForm({ ...admitForm, codeStatus: e.target.value })} style={{ width: '100%', padding: '9px 12px', fontSize: 12, border: '1.5px solid #cbd5e1', borderRadius: 8, backgroundColor: '#ffffff', boxSizing: 'border-box' }}>
+                      <option value="Full">Full Code</option>
+                      <option value="DNR">DNR / DNI</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, display: 'flex', gap: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#334155', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={admitForm.npoStatus} onChange={(e) => setAdmitForm({ ...admitForm, npoStatus: e.target.checked })} style={{ accentColor: '#d97706' }} />
+                    <span>NPO (Nil Per Os) Active</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#334155', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={admitForm.isolationStatus} onChange={(e) => setAdmitForm({ ...admitForm, isolationStatus: e.target.checked })} style={{ accentColor: '#dc2626' }} />
+                    <span>Infection Isolation</span>
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" onClick={() => setShowAdmitPatientModal(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #cbd5e1', backgroundColor: '#ffffff', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={admitMutation.isPending} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', backgroundColor: '#0284c7', color: '#ffffff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  {admitMutation.isPending ? 'Admitting...' : 'Admit & Generate eMAR'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 8. STAFF DIGITAL SMART BADGE MODAL                       */}
       {/* ======================================================== */}
       {badgeModalUser && (
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.7)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          padding: 20
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(5px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20
         }}>
-          <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: 20,
-            width: 320,
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
-            overflow: 'hidden',
-            border: '2px solid #0f172a',
-            position: 'relative'
-          }}>
-            {/* Lanyard Hole */}
-            <div style={{
-              width: 50,
-              height: 10,
-              backgroundColor: '#0f172a',
-              borderRadius: 6,
-              margin: '12px auto 0'
-            }} />
-
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 20, width: 320, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', overflow: 'hidden', border: '2px solid #0f172a' }}>
+            <div style={{ width: 50, height: 10, backgroundColor: '#0f172a', borderRadius: 6, margin: '12px auto 0' }} />
             <div style={{ padding: '16px 20px 24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', letterSpacing: '0.04em' }}>
-                METROPOLITAN GENERAL
-              </div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', letterSpacing: '0.08em', marginBottom: 14 }}>
-                CLINICAL SMART BADGE &bull; RFID PASS
-              </div>
-
-              <img
-                src={badgeModalUser.avatarUrl || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150'}
-                alt={badgeModalUser.name}
-                style={{
-                  width: 90,
-                  height: 90,
-                  borderRadius: 14,
-                  objectFit: 'cover',
-                  border: '3px solid #0f172a',
-                  margin: '0 auto 12px'
-                }}
-              />
-
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
-                {badgeModalUser.name}
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', marginBottom: 8 }}>
-                {badgeModalUser.title || badgeModalUser.role}
-              </div>
-
-              <div style={{
-                backgroundColor: '#f1f5f9',
-                borderRadius: 8,
-                padding: '8px 12px',
-                fontSize: 10,
-                textAlign: 'left',
-                marginBottom: 14
-              }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>METROPOLITAN GENERAL</div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', letterSpacing: '0.08em', marginBottom: 14 }}>CLINICAL SMART BADGE</div>
+              <img src={badgeModalUser.avatarUrl || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150'} alt={badgeModalUser.name} style={{ width: 90, height: 90, borderRadius: 14, objectFit: 'cover', border: '3px solid #0f172a', margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{badgeModalUser.name}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', marginBottom: 8 }}>{badgeModalUser.title || badgeModalUser.role}</div>
+              <div style={{ backgroundColor: '#f1f5f9', borderRadius: 8, padding: '8px 12px', fontSize: 10, textAlign: 'left', marginBottom: 14 }}>
                 <div><strong>BADGE ID:</strong> <span style={{ fontFamily: 'monospace' }}>{badgeModalUser.staffId}</span></div>
                 <div><strong>DEPT:</strong> {badgeModalUser.department}</div>
                 <div><strong>LICENSE:</strong> <span style={{ fontFamily: 'monospace' }}>{badgeModalUser.licenseNumber}</span></div>
-                <div><strong>CLEARANCE:</strong> LEVEL 3 CLINICAL eMAR</div>
               </div>
-
-              {/* Barcode Mock */}
-              <div style={{
-                height: 34,
-                backgroundColor: '#0f172a',
-                borderRadius: 4,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff',
-                fontFamily: 'monospace',
-                fontSize: 10,
-                letterSpacing: '0.3em'
-              }}>
-                ||||| | |||| ||| || ||||
-              </div>
-
-              <button
-                onClick={() => setBadgeModalUser(null)}
-                style={{
-                  marginTop: 16,
-                  width: '100%',
-                  padding: '8px',
-                  borderRadius: 8,
-                  backgroundColor: '#0f172a',
-                  color: '#ffffff',
-                  border: 'none',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-              >
-                Close Badge
-              </button>
+              <button onClick={() => setBadgeModalUser(null)} style={{ width: '100%', padding: '8px', borderRadius: 8, backgroundColor: '#0f172a', color: '#ffffff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Close Badge</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 9. PATIENT DIGITAL WRISTBAND MODAL                       */}
+      {/* ======================================================== */}
+      {wristbandModalPatient && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(5px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20
+        }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: 20, width: 360, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', overflow: 'hidden', border: '2px solid #0f172a', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>METROPOLITAN GENERAL HOSPITAL</div>
+              <button onClick={() => setWristbandModalPatient(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            <div style={{ border: '2px solid #0f172a', borderRadius: 12, padding: '16px', backgroundColor: '#f8fafc', marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{wristbandModalPatient.name}</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>DOB: {wristbandModalPatient.dob ? format(new Date(wristbandModalPatient.dob), 'dd-MMM-yyyy') : '14-Mar-1979'}</div>
+                </div>
+                {wristbandModalPatient.allergies?.length > 0 && (
+                  <span style={{ backgroundColor: '#dc2626', color: '#ffffff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 4 }}>ALLERGY</span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 4 }}><strong>MRN:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{wristbandModalPatient.mrn}</span></div>
+              <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 12 }}><strong>BED:</strong> {wristbandModalPatient.bed || 'ICU-12'} &bull; Ward 4B ICU</div>
+              <div style={{ height: 42, backgroundColor: '#0f172a', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.35em' }}>
+                |||||| | ||| |||| || ||||||
+              </div>
+            </div>
+            <button onClick={() => setWristbandModalPatient(null)} style={{ width: '100%', padding: '9px', borderRadius: 8, backgroundColor: '#0f172a', color: '#ffffff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Close Wristband</button>
           </div>
         </div>
       )}

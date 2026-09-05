@@ -1,12 +1,12 @@
 import api from '../api/client';
 
 export const authService = {
-  login: (data: { email?: string; password?: string; adminId?: string; staffId?: string; pin?: string } | string, maybePassword?: string) => {
+  login: (data: { email?: string; password?: string; adminId?: string; staffId?: string; mrn?: string; pin?: string; isPatient?: boolean } | string, maybePassword?: string) => {
     const payload = typeof data === 'string' ? { email: data, password: maybePassword } : data;
     return api.post('/auth/login', payload).then(r => r.data);
   },
-  impersonate: (targetUserId?: string, targetStaffId?: string) =>
-    api.post('/auth/impersonate', { targetUserId, targetStaffId }).then(r => r.data),
+  impersonate: (targetUserId?: string, targetStaffId?: string, targetPatientId?: string, targetMrn?: string) =>
+    api.post('/auth/impersonate', { targetUserId, targetStaffId, targetPatientId, targetMrn }).then(r => r.data),
   logout: (refreshToken: string) =>
     api.post('/auth/logout', { refreshToken }),
   me: () => api.get('/auth/me').then(r => r.data),
@@ -15,6 +15,8 @@ export const authService = {
 export const patientService = {
   getAll: (params?: Record<string, string>) =>
     api.get('/patients', { params }).then(r => r.data),
+  getMyRecord: () =>
+    api.get('/patients/me').then(r => r.data),
   search: (q: string) =>
     api.get('/patients/search', { params: { q } }).then(r => r.data),
   getById: (id: string) =>

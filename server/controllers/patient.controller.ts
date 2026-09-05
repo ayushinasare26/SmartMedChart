@@ -52,8 +52,14 @@ export const searchPatients = async (req: AuthRequest, res: Response, next: Next
 
 export const getPatient = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const targetId = req.params.id === 'me' ? req.user?.id : req.params.id;
+    if (!targetId) {
+      res.status(400).json({ error: 'Patient ID required' });
+      return;
+    }
+
     const patient = await prisma.patient.findUnique({
-      where: { id: req.params.id },
+      where: { id: targetId },
       include: {
         allergies: true,
         ward: true,
@@ -67,6 +73,13 @@ export const getPatient = async (req: AuthRequest, res: Response, next: NextFunc
             },
           },
           orderBy: { createdAt: 'desc' },
+        },
+        administrations: {
+          include: {
+            administeredBy: { select: { name: true, role: true, staffId: true } },
+          },
+          orderBy: { administeredAt: 'desc' },
+          take: 20,
         },
         safetyAlerts: {
           where: { isResolved: false },

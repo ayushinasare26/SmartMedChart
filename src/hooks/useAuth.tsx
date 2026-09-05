@@ -5,8 +5,11 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: 'DOCTOR' | 'NURSE' | 'PHARMACIST' | 'ADMIN';
-  staffId: string;
+  role: 'DOCTOR' | 'NURSE' | 'PHARMACIST' | 'ADMIN' | 'PATIENT' | 'OTHER_STAFF';
+  staffId?: string;
+  patientId?: string;
+  mrn?: string;
+  bed?: string;
   ward?: string;
   department?: string;
   title?: string;
@@ -21,8 +24,8 @@ interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: string | { email?: string; password?: string; adminId?: string; staffId?: string; pin?: string }, password?: string) => Promise<User>;
-  impersonate: (targetUserId?: string, targetStaffId?: string) => Promise<User>;
+  login: (credentials: string | { email?: string; password?: string; adminId?: string; staffId?: string; mrn?: string; pin?: string; isPatient?: boolean }, password?: string) => Promise<User>;
+  impersonate: (targetUserId?: string, targetStaffId?: string, targetPatientId?: string, targetMrn?: string) => Promise<User>;
   logout: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
 }
@@ -38,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const login = useCallback(async (credentials: string | { email?: string; password?: string; adminId?: string; staffId?: string; pin?: string }, password?: string) => {
+  const login = useCallback(async (credentials: string | { email?: string; password?: string; adminId?: string; staffId?: string; mrn?: string; pin?: string; isPatient?: boolean }, password?: string) => {
     setIsLoading(true);
     try {
       const payload = typeof credentials === 'string' ? { email: credentials, password } : credentials;
@@ -53,10 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const impersonate = useCallback(async (targetUserId?: string, targetStaffId?: string) => {
+  const impersonate = useCallback(async (targetUserId?: string, targetStaffId?: string, targetPatientId?: string, targetMrn?: string) => {
     setIsLoading(true);
     try {
-      const { data } = await api.post('/auth/impersonate', { targetUserId, targetStaffId });
+      const { data } = await api.post('/auth/impersonate', { targetUserId, targetStaffId, targetPatientId, targetMrn });
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
       localStorage.setItem('user', JSON.stringify(data.user));

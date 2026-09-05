@@ -25,6 +25,27 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       id: string; email: string; role: string; name: string;
     };
 
+    if (decoded.role === 'PATIENT') {
+      const patient = await prisma.patient.findUnique({
+        where: { id: decoded.id },
+        select: { id: true, name: true, mrn: true, status: true },
+      });
+
+      if (!patient) {
+        res.status(401).json({ error: 'Patient chart not found' });
+        return;
+      }
+
+      req.user = {
+        id: patient.id,
+        email: `${patient.mrn}@patient.smartmedchart.org`,
+        role: 'PATIENT',
+        name: patient.name,
+      };
+      next();
+      return;
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: decoded.id, isActive: true },
       select: { id: true, email: true, role: true, name: true },

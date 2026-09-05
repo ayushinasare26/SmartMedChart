@@ -4,7 +4,8 @@ import { useAuth } from '../hooks/useAuth';
 import {
   Shield, Eye, EyeOff, Fingerprint, Key, Smartphone,
   AlertTriangle, Loader2, Lock, UserCheck, Briefcase,
-  UserPlus, CheckCircle2, Stethoscope, ArrowRight, User
+  UserPlus, CheckCircle2, Stethoscope, ArrowRight, User,
+  Heart, Building2, UserCircle
 } from 'lucide-react';
 
 const ADMIN_PRESETS = [
@@ -31,13 +32,20 @@ const CLINICAL_PRESETS = [
   { name: 'Admin Elena', role: 'Ward Supervisor', email: 'elena.admin@metrohealth.org', staffId: 'ADM-2001', color: '#d97706', initials: 'AE' },
 ];
 
+const PATIENT_PRESETS = [
+  { name: 'Rahul Patil', mrn: '94021-08', bed: 'Bed ICU-12', diagnosis: 'Septic Shock', pin: '1234', initials: 'RP', color: '#0b4da2' },
+  { name: 'Anita Desai', mrn: '94022-15', bed: 'Bed ICU-14', diagnosis: 'Type 2 Diabetes', pin: '1234', initials: 'AD', color: '#0284c7' },
+  { name: 'George Matthews', mrn: '94023-08', bed: 'Bed ICU-08', diagnosis: 'Post-op Bowel Resection', pin: '1234', initials: 'GM', color: '#0d9488' },
+  { name: 'Margaret Brown', mrn: '94024-03', bed: 'Bed ICU-03', diagnosis: 'COPD Exacerbation', pin: '1234', initials: 'MB', color: '#7c3aed' },
+];
+
 export default function LoginPage() {
   const { login, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Tab: 'admin' | 'clinical'
-  const [activeTab, setActiveTab] = useState<'admin' | 'clinical'>('admin');
+  // Tab: 'admin' | 'clinical' | 'patient'
+  const [activeTab, setActiveTab] = useState<'admin' | 'clinical' | 'patient'>('admin');
 
   // Admin form state
   const [selectedAdminIndex, setSelectedAdminIndex] = useState(0);
@@ -51,6 +59,12 @@ export default function LoginPage() {
   const [showClinicalPass, setShowClinicalPass] = useState(false);
   const [selectedMfa, setSelectedMfa] = useState<'biometric' | 'yubikey' | 'otp'>('biometric');
 
+  // Patient form state
+  const [selectedPatientIndex, setSelectedPatientIndex] = useState(0);
+  const [patientMrn, setPatientMrn] = useState('94021-08');
+  const [patientPin, setPatientPin] = useState('1234');
+  const [showPatientPin, setShowPatientPin] = useState(false);
+
   const [error, setError] = useState('');
 
   const handleAdminSelect = (idx: number) => {
@@ -62,6 +76,12 @@ export default function LoginPage() {
   const handleClinicalSelect = (preset: typeof CLINICAL_PRESETS[0]) => {
     setClinicalEmail(preset.email);
     setClinicalPassword('SmartMed@2024');
+  };
+
+  const handlePatientSelect = (idx: number) => {
+    setSelectedPatientIndex(idx);
+    setPatientMrn(PATIENT_PRESETS[idx].mrn);
+    setPatientPin(PATIENT_PRESETS[idx].pin);
   };
 
   const handleAdminSubmit = async (e: React.FormEvent) => {
@@ -87,8 +107,7 @@ export default function LoginPage() {
   const handleEnrollShortcut = async () => {
     setError('');
     try {
-      // Auto-authenticate with Chief Medical Officer Evelyn Vance to access enrollment
-      const user = await login({ adminId: 'ADM-9001', pin: '9999' });
+      await login({ adminId: 'ADM-9001', pin: '9999' });
       navigate('/admin?enroll=true');
     } catch (err: any) {
       setError('Failed to enter enrollment mode.');
@@ -106,6 +125,18 @@ export default function LoginPage() {
       else navigate('/admin');
     } catch (err: any) {
       const respMsg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Clinical authentication failed.';
+      setError(String(respMsg));
+    }
+  };
+
+  const handlePatientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await login({ mrn: patientMrn.trim(), pin: patientPin.trim(), isPatient: true });
+      navigate('/patient-portal');
+    } catch (err: any) {
+      const respMsg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Patient authentication failed. Check MRN & Passcode.';
       setError(String(respMsg));
     }
   };
@@ -151,7 +182,7 @@ export default function LoginPage() {
               SmartMedChart
             </div>
             <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
-              Hospital Inpatient &amp; Administration System
+              Hospital Inpatient, Staff &amp; Patient Administration System
             </div>
           </div>
         </div>
@@ -187,17 +218,17 @@ export default function LoginPage() {
       }}>
         <div style={{
           width: '100%',
-          maxWidth: 460,
+          maxWidth: 480,
           backgroundColor: '#ffffff',
           borderRadius: 22,
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08)',
           padding: '28px 28px 24px',
           color: '#0f172a'
         }}>
-          {/* Top Segmented Navigation Tabs */}
+          {/* Top 3-Way Segmented Navigation Tabs */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+            gridTemplateColumns: 'repeat(3, 1fr)',
             backgroundColor: '#f1f5f9',
             padding: 4,
             borderRadius: 14,
@@ -211,12 +242,12 @@ export default function LoginPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 7,
-                padding: '9px 14px',
-                borderRadius: 11,
+                gap: 5,
+                padding: '8px 10px',
+                borderRadius: 10,
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 700,
                 backgroundColor: activeTab === 'admin' ? '#0b4da2' : 'transparent',
                 color: activeTab === 'admin' ? '#ffffff' : '#64748b',
@@ -224,8 +255,8 @@ export default function LoginPage() {
                 transition: 'all 0.18s ease'
               }}
             >
-              <Shield size={15} />
-              <span>1. Administrator</span>
+              <Shield size={14} />
+              <span>1. Admin</span>
             </button>
 
             <button
@@ -235,12 +266,12 @@ export default function LoginPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 7,
-                padding: '9px 14px',
-                borderRadius: 11,
+                gap: 5,
+                padding: '8px 10px',
+                borderRadius: 10,
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 700,
                 backgroundColor: activeTab === 'clinical' ? '#0b4da2' : 'transparent',
                 color: activeTab === 'clinical' ? '#ffffff' : '#64748b',
@@ -248,8 +279,32 @@ export default function LoginPage() {
                 transition: 'all 0.18s ease'
               }}
             >
-              <Stethoscope size={15} />
-              <span>2. Clinical Staff</span>
+              <Stethoscope size={14} />
+              <span>2. Clinical</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setActiveTab('patient'); setError(''); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                padding: '8px 10px',
+                borderRadius: 10,
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 700,
+                backgroundColor: activeTab === 'patient' ? '#0b4da2' : 'transparent',
+                color: activeTab === 'patient' ? '#ffffff' : '#64748b',
+                boxShadow: activeTab === 'patient' ? '0 2px 8px rgba(11, 77, 162, 0.35)' : 'none',
+                transition: 'all 0.18s ease'
+              }}
+            >
+              <Heart size={14} />
+              <span>3. Patients</span>
             </button>
           </div>
 
@@ -258,7 +313,6 @@ export default function LoginPage() {
           {/* ======================================================== */}
           {activeTab === 'admin' && (
             <div>
-              {/* Shield Icon & Authority Badge */}
               <div style={{ textAlign: 'center', marginBottom: 20 }}>
                 <div style={{
                   width: 52,
@@ -340,7 +394,6 @@ export default function LoginPage() {
 
               {/* Admin Form */}
               <form onSubmit={handleAdminSubmit}>
-                {/* Admin ID / Username */}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 5 }}>
                     Administrator ID / Username
@@ -367,13 +420,10 @@ export default function LoginPage() {
                         backgroundColor: '#ffffff',
                         boxSizing: 'border-box'
                       }}
-                      onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
-                      onBlur={(e) => (e.target.style.borderColor = '#cbd5e1')}
                     />
                   </div>
                 </div>
 
-                {/* Admin PIN */}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 5 }}>
                     Admin Security Passcode / PIN
@@ -401,64 +451,24 @@ export default function LoginPage() {
                         backgroundColor: '#ffffff',
                         boxSizing: 'border-box'
                       }}
-                      onFocus={(e) => (e.target.style.borderColor = '#2563eb')}
-                      onBlur={(e) => (e.target.style.borderColor = '#cbd5e1')}
                     />
                     <button
                       type="button"
                       onClick={() => setShowAdminPin(!showAdminPin)}
-                      style={{
-                        position: 'absolute',
-                        right: 12,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: '#94a3b8',
-                        padding: 0
-                      }}
+                      style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
                     >
                       {showAdminPin ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
                 </div>
 
-                {/* Remember & Demo Credentials */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b', cursor: 'pointer' }}>
-                    <input type="checkbox" defaultChecked style={{ accentColor: '#2563eb' }} />
-                    <span>Remember Device</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => handleAdminSelect(0)}
-                    style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}
-                  >
-                    Demo Credentials?
-                  </button>
-                </div>
-
-                {/* Error Banner */}
                 {error && (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    backgroundColor: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    color: '#b91c1c',
-                    fontSize: 12,
-                    marginBottom: 14
-                  }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: 12, marginBottom: 14 }}>
                     <AlertTriangle size={15} style={{ flexShrink: 0 }} />
                     <span>{error}</span>
                   </div>
                 )}
 
-                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -477,34 +487,19 @@ export default function LoginPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 8,
-                    boxShadow: '0 4px 14px rgba(13, 94, 196, 0.35)',
-                    transition: 'all 0.15s ease'
+                    boxShadow: '0 4px 14px rgba(13, 94, 196, 0.35)'
                   }}
-                  onMouseOver={(e) => (e.currentTarget.style.filter = 'brightness(1.08)')}
-                  onMouseOut={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
                 >
                   {isLoading ? (
-                    <>
-                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Verifying Authority...</span>
-                    </>
+                    <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /><span>Verifying Authority...</span></>
                   ) : (
-                    <>
-                      <span>Authenticate &amp; Enter Admin Hub</span>
-                      <ArrowRight size={16} />
-                    </>
+                    <><span>Authenticate &amp; Enter Admin Hub</span><ArrowRight size={16} /></>
                   )}
                 </button>
               </form>
 
-              {/* Enrollment Shortcut */}
               <div style={{ marginTop: 20 }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  margin: '0 0 12px'
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 0 12px' }}>
                   <div style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
                   <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                     HOSPITAL STAFF ENROLLMENT
@@ -528,16 +523,7 @@ export default function LoginPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: 6,
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f0f9ff';
-                    e.currentTarget.style.borderColor = '#38bdf8';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = '#ffffff';
-                    e.currentTarget.style.borderColor = '#93c5fd';
+                    gap: 6
                   }}
                 >
                   <UserPlus size={15} />
@@ -545,16 +531,7 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              {/* Security Compliance Footer */}
-              <div style={{
-                marginTop: 18,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                fontSize: 11,
-                color: '#64748b'
-              }}>
+              <div style={{ marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11, color: '#64748b' }}>
                 <CheckCircle2 size={13} color="#10b981" />
                 <span>256-bit TLS Encrypted &bull; HIPAA &amp; NHS Digital Compliant</span>
               </div>
@@ -603,7 +580,6 @@ export default function LoginPage() {
                 </p>
               </div>
 
-              {/* Quick Clinician Switch */}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -658,9 +634,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Form */}
               <form onSubmit={handleClinicalSubmit}>
-                {/* Email / Staff ID */}
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
                     Clinician Staff ID / Hospital SSO Email
@@ -685,7 +659,6 @@ export default function LoginPage() {
                   />
                 </div>
 
-                {/* Password */}
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
@@ -715,24 +688,13 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowClinicalPass(!showClinicalPass)}
-                      style={{
-                        position: 'absolute',
-                        right: 10,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: '#94a3b8',
-                        padding: 0
-                      }}
+                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
                     >
                       {showClinicalPass ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
                 </div>
 
-                {/* MFA Method Selection */}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
                     SECONDARY VERIFICATION (MANDATORY FOR CPOE)
@@ -765,26 +727,13 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {/* Error Banner */}
                 {error && (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    backgroundColor: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    color: '#b91c1c',
-                    fontSize: 12,
-                    marginBottom: 12
-                  }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: 12, marginBottom: 12 }}>
                     <AlertTriangle size={15} style={{ flexShrink: 0 }} />
                     <span>{error}</span>
                   </div>
                 )}
 
-                {/* Submit */}
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -807,31 +756,229 @@ export default function LoginPage() {
                   }}
                 >
                   {isLoading ? (
-                    <>
-                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Authenticating Clinical Session...</span>
-                    </>
+                    <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /><span>Authenticating Clinical Session...</span></>
                   ) : (
-                    <>
-                      <Shield size={16} />
-                      <span>Authenticate &amp; Open Clinical Chart</span>
-                    </>
+                    <><Shield size={16} /><span>Authenticate &amp; Open Clinical Chart</span></>
                   )}
                 </button>
-
-                <div style={{ marginTop: 12, textAlign: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setClinicalEmail('sharma.md@metrohealth.org');
-                      setClinicalPassword('SmartMed@2024');
-                    }}
-                    style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    🚨 Emergency STAT Override (Witness Required)
-                  </button>
-                </div>
               </form>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* TAB 3: PATIENT PORTAL LOGIN                              */}
+          {/* ======================================================== */}
+          {activeTab === 'patient' && (
+            <div>
+              <div style={{ textAlign: 'center', marginBottom: 18 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 12,
+                  background: 'linear-gradient(145deg, #0b4da2, #0284c7)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 8px 18px rgba(11, 77, 162, 0.25)',
+                  marginBottom: 10
+                }}>
+                  <Heart size={24} color="#ffffff" />
+                </div>
+                <div>
+                  <span style={{
+                    display: 'inline-block',
+                    backgroundColor: '#eff6ff',
+                    color: '#1d4ed8',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: '0.08em',
+                    padding: '3px 10px',
+                    borderRadius: 9999,
+                    marginBottom: 6
+                  }}>
+                    INPATIENT MYCHART ACCESS
+                  </span>
+                </div>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: '4px 0 4px', letterSpacing: '-0.02em' }}>
+                  Patient &amp; Family Sign In
+                </h2>
+                <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                  Enter your MRN to review medications, doses given by nurses, and safety precautions.
+                </p>
+              </div>
+
+              {/* Quick Patient Selection */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    SELECT ADMITTED INPATIENT (DEMO):
+                  </span>
+                  <span style={{ fontSize: 10, color: '#0b4da2', fontWeight: 700 }}>4 Active Patients</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {PATIENT_PRESETS.map((p, idx) => {
+                    const isSelected = selectedPatientIndex === idx && patientMrn === p.mrn;
+                    return (
+                      <button
+                        key={p.mrn}
+                        type="button"
+                        onClick={() => handlePatientSelect(idx)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '7px 9px',
+                          borderRadius: 9,
+                          border: `1.5px solid ${isSelected ? p.color : '#e2e8f0'}`,
+                          backgroundColor: isSelected ? `${p.color}10` : '#ffffff',
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                      >
+                        <div style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: '50%',
+                          backgroundColor: p.color,
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 10,
+                          fontWeight: 800,
+                          flexShrink: 0
+                        }}>
+                          {p.initials}
+                        </div>
+                        <div style={{ overflow: 'hidden' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {p.name}
+                          </div>
+                          <div style={{ fontSize: 9, color: '#64748b', fontFamily: 'monospace' }}>
+                            {p.mrn} &bull; {p.bed}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Patient Form */}
+              <form onSubmit={handlePatientSubmit}>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+                    Medical Record Number (MRN)
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
+                      <UserCircle size={16} />
+                    </div>
+                    <input
+                      type="text"
+                      value={patientMrn}
+                      onChange={(e) => setPatientMrn(e.target.value)}
+                      placeholder="e.g. 94021-08"
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px 9px 36px',
+                        fontSize: 13,
+                        fontFamily: 'monospace',
+                        fontWeight: 700,
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: 8,
+                        outline: 'none',
+                        color: '#0f172a',
+                        backgroundColor: '#ffffff',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                      Bed Passcode / PIN (Default: 1234)
+                    </label>
+                    <span style={{ fontSize: 10, color: '#0b4da2', cursor: 'pointer' }} onClick={() => setPatientPin('1234')}>Use 1234</span>
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
+                      <Lock size={16} />
+                    </div>
+                    <input
+                      type={showPatientPin ? 'text' : 'password'}
+                      value={patientPin}
+                      onChange={(e) => setPatientPin(e.target.value)}
+                      placeholder="Enter 4-digit PIN"
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '9px 36px 9px 36px',
+                        fontSize: 13,
+                        letterSpacing: showPatientPin ? '0' : '0.2em',
+                        fontWeight: 700,
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: 8,
+                        outline: 'none',
+                        color: '#0f172a',
+                        backgroundColor: '#ffffff',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPatientPin(!showPatientPin)}
+                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                    >
+                      {showPatientPin ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: 12, marginBottom: 12 }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  style={{
+                    width: '100%',
+                    padding: '11px 16px',
+                    borderRadius: 9,
+                    backgroundColor: '#0b4da2',
+                    backgroundImage: 'linear-gradient(180deg, #0d5ec4 0%, #0a499f 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 12px rgba(11, 77, 162, 0.3)'
+                  }}
+                >
+                  {isLoading ? (
+                    <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /><span>Opening MyChart Session...</span></>
+                  ) : (
+                    <><Heart size={16} /><span>Access My Medical Chart</span></>
+                  )}
+                </button>
+              </form>
+
+              <div style={{ marginTop: 14, textAlign: 'center', fontSize: 11, color: '#64748b' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Shield size={12} color="#16a34a" /> Protected by Hospital Patient Privacy &amp; HIPAA eMAR Gateway
+                </span>
+              </div>
             </div>
           )}
         </div>
@@ -848,12 +995,16 @@ export default function LoginPage() {
         justifyContent: 'center',
         gap: 16
       }}>
-        <span style={{ cursor: 'pointer', transition: 'color 0.15s' }} onMouseOver={(e) => (e.currentTarget.style.color = '#94a3b8')} onMouseOut={(e) => (e.currentTarget.style.color = '#64748b')}>
+        <span style={{ cursor: 'pointer', transition: 'color 0.15s' }}>
           Administrator Support
         </span>
         <span>&bull;</span>
-        <span style={{ cursor: 'pointer', transition: 'color 0.15s' }} onMouseOver={(e) => (e.currentTarget.style.color = '#94a3b8')} onMouseOut={(e) => (e.currentTarget.style.color = '#64748b')}>
+        <span style={{ cursor: 'pointer', transition: 'color 0.15s' }}>
           Clinical Security Policy
+        </span>
+        <span>&bull;</span>
+        <span style={{ cursor: 'pointer', transition: 'color 0.15s' }}>
+          Patient Rights &amp; Privacy Notice
         </span>
       </footer>
     </div>
