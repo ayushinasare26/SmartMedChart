@@ -24,7 +24,12 @@ export const getSchedules = async (req: AuthRequest, res: Response, next: NextFu
 
     const schedules = await prisma.medicationSchedule.findMany({
       where: {
-        ...(patientId && { patientId: patientId as string }),
+        ...(patientId && {
+          OR: [
+            { patientId: patientId as string },
+            { patient: { mrn: patientId as string } },
+          ],
+        }),
         ...(status && { status: status as any }),
         scheduledTime: { gte: startOfDay, lte: endOfDay },
       },

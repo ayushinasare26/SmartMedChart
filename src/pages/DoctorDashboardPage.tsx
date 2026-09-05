@@ -86,27 +86,61 @@ export default function DoctorDashboardPage() {
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>Recent CPOE Orders</h3>
               <button onClick={() => navigate('/prescriptions')} className="btn-ghost" style={{ fontSize: 11 }}>View All</button>
             </div>
-            {(stats?.recentPrescriptions || []).slice(0, 6).map((rx: any) => (
-              <div key={rx.id} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{rx.medicationName}</span>
-                    {rx.isStatOrder && <span className="chip chip-stat">STAT</span>}
-                    {rx.status === 'HELD' && <span className="chip chip-held">HELD</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    {rx.patient?.name} · Bed {rx.patient?.bed} · {rx.dose}{rx.unit} {rx.route}
-                  </div>
-                  {rx.safetyAlerts?.length > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                      <AlertTriangle size={11} color="var(--color-stat-red)" />
-                      <span style={{ fontSize: 11, color: 'var(--color-stat-red)' }}>{rx.safetyAlerts.length} Safety Alert(s)</span>
+            {(stats?.recentPrescriptions || []).slice(0, 6).map((rx: any) => {
+              const targetPatientId = rx.patientId || rx.patient?.id;
+              return (
+                <div
+                  key={rx.id}
+                  onClick={() => targetPatientId && navigate(`/patients/${targetPatientId}`)}
+                  style={{
+                    padding: '12px 20px',
+                    borderBottom: '1px solid var(--color-border)',
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'flex-start',
+                    cursor: targetPatientId ? 'pointer' : 'default',
+                    transition: 'background 0.15s ease'
+                  }}
+                  onMouseOver={e => { if (targetPatientId) e.currentTarget.style.background = 'var(--color-bg-hover)'; }}
+                  onMouseOut={e => { e.currentTarget.style.background = ''; }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{rx.medicationName}</span>
+                      {rx.isStatOrder && <span className="chip chip-stat">STAT</span>}
+                      {rx.status === 'HELD' && <span className="chip chip-held">HELD</span>}
                     </div>
-                  )}
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                      {rx.patient?.name} · Bed {rx.patient?.bed} · {rx.dose}{rx.unit} {rx.route}
+                    </div>
+                    {rx.safetyAlerts?.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <AlertTriangle size={11} color="var(--color-stat-red)" />
+                        <span style={{ fontSize: 11, color: 'var(--color-stat-red)' }}>{rx.safetyAlerts.length} Safety Alert(s)</span>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (targetPatientId) navigate(`/patients/${targetPatientId}`);
+                    }}
+                    className="btn-ghost"
+                    style={{
+                      fontSize: 11,
+                      padding: '5px 12px',
+                      fontWeight: 600,
+                      color: 'var(--color-accent-blue-light)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 6
+                    }}
+                  >
+                    View
+                  </button>
                 </div>
-                <button onClick={() => navigate(`/patients/${rx.patientId}`)} className="btn-ghost" style={{ fontSize: 11, padding: '5px 10px' }}>View</button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Active Patients */}

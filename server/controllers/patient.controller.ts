@@ -58,8 +58,13 @@ export const getPatient = async (req: AuthRequest, res: Response, next: NextFunc
       return;
     }
 
-    const patient = await prisma.patient.findUnique({
-      where: { id: targetId },
+    const patient = await prisma.patient.findFirst({
+      where: {
+        OR: [
+          { id: targetId },
+          { mrn: targetId },
+        ],
+      },
       include: {
         allergies: true,
         ward: true,
@@ -78,7 +83,7 @@ export const getPatient = async (req: AuthRequest, res: Response, next: NextFunc
           include: {
             administeredBy: { select: { name: true, role: true, staffId: true } },
           },
-          orderBy: { administeredAt: 'desc' },
+          orderBy: { signedAt: 'desc' },
           take: 20,
         },
         safetyAlerts: {

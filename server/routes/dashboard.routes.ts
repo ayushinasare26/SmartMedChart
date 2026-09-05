@@ -70,7 +70,7 @@ router.get('/doctor', async (req: AuthRequest, res: Response, next: NextFunction
       prisma.prescription.findMany({
         where: { prescriberId: req.user!.id },
         include: {
-          patient: { select: { name: true, mrn: true, bed: true } },
+          patient: { select: { id: true, name: true, mrn: true, bed: true } },
           safetyAlerts: { where: { isResolved: false } },
         },
         orderBy: { createdAt: 'desc' },
