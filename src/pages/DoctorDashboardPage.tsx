@@ -21,7 +21,7 @@ export default function DoctorDashboardPage() {
   });
 
   return (
-    <div>
+    <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       {/* Top Bar */}
       <div className="top-bar">
         <div className="top-bar-section">

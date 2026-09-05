@@ -21,7 +21,7 @@ export default function PatientsListPage() {
   );
 
   return (
-    <div>
+    <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       <div className="top-bar">
         <div className="top-bar-section">
           <User size={14} color="var(--color-accent-blue-light)" />

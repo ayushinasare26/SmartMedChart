@@ -22,7 +22,7 @@ export default function SafetyAuditPage() {
   const riskColor = safety?.riskIndex < 30 ? 'var(--color-given-green)' : safety?.riskIndex < 60 ? 'var(--color-due-amber)' : 'var(--color-stat-red)';
 
   return (
-    <div>
+    <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       {/* Top Bar */}
       <div className="top-bar">
         <div className="top-bar-section">

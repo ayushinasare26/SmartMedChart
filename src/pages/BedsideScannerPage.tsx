@@ -73,7 +73,7 @@ export default function BedsideScannerPage() {
   const age = dob ? Math.floor((Date.now() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : null;
 
   return (
-    <div>
+    <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       {/* Top Bar */}
       <div className="top-bar">
         <div className="top-bar-section">

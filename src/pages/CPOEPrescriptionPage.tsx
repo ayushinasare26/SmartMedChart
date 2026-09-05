@@ -133,7 +133,7 @@ export default function CPOEPrescriptionPage() {
   const activePrescriptions = (prescriptions as any[]).filter(p => ['ACTIVE'].includes(p.status)).slice(0, 3);
 
   return (
-    <div>
+    <div style={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       {/* Top Bar */}
       <div className="top-bar">
         <div className="top-bar-section">
@@ -159,7 +159,7 @@ export default function CPOEPrescriptionPage() {
 
       {/* Assigned Physician */}
       {watchPatient && selectedPatient && (
-        <div style={{ background: 'rgba(10,15,26,0.8)', borderBottom: '1px solid var(--color-border)', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 16, fontSize: 12 }}>
+        <div style={{ background: 'rgba(10,15,26,0.8)', borderBottom: '1px solid var(--color-border)', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, width: '100%', boxSizing: 'border-box' }}>
           <span style={{ color: 'var(--color-text-muted)' }}>ASSIGNED PHYSICIAN</span>
           <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{user?.name}</span>
           <span style={{ color: 'var(--color-text-muted)', marginLeft: 8 }}>Credentialed Level-IV CPOE</span>
@@ -172,10 +172,10 @@ export default function CPOEPrescriptionPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 0, height: 'calc(100vh - 48px)', overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: 0, flex: 1, height: 'calc(100vh - 52px)', overflow: 'hidden', width: '100%' }}>
         {/* Main Form */}
-        <div style={{ overflow: 'auto' }}>
-          <div className="page-content">
+        <div style={{ overflow: 'auto', minWidth: 0, width: '100%' }}>
+          <div className="page-content" style={{ width: '100%', padding: '24px 32px' }}>
             <form onSubmit={handleSubmit(onSubmit)}>
               <div className="card" style={{ marginBottom: 20 }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -358,7 +358,7 @@ export default function CPOEPrescriptionPage() {
         </div>
 
         {/* Right Sidebar */}
-        <div style={{ borderLeft: '1px solid var(--color-border)', overflow: 'auto', background: 'var(--color-bg-secondary)' }}>
+        <div style={{ borderLeft: '1px solid var(--color-border)', overflow: 'auto', background: 'var(--color-bg-secondary)', width: 380, flexShrink: 0, boxSizing: 'border-box' }}>
           {/* STAT Pending */}
           <div style={{ padding: 16, borderBottom: '1px solid var(--color-border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
