@@ -19,8 +19,8 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       return;
     }
 
-    const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+    const secret = process.env.JWT_SECRET || 'smartmedchart-super-secret-jwt-key-hipaa-compliant-2024';
+    const decoded = jwt.verify(token, secret) as {
       id: string; email: string; role: string; name: string;
     };
 

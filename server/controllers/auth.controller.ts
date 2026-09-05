@@ -5,8 +5,8 @@ import { prisma } from '../config/prisma';
 import { createAuditLog } from '../utils/audit';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET || 'smartmedchart-super-secret-jwt-key-hipaa-compliant-2024';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'smartmedchart-refresh-secret-key-hipaa-compliant-2024';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '8h';
 
