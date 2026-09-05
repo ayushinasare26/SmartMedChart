@@ -19,6 +19,7 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       return;
     }
 
+    const token = authHeader.substring(7);
     const secret = process.env.JWT_SECRET || 'smartmedchart-super-secret-jwt-key-hipaa-compliant-2024';
     const decoded = jwt.verify(token, secret) as {
       id: string; email: string; role: string; name: string;
@@ -36,8 +37,9 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 
     req.user = user;
     next();
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid or expired token' });
+  } catch (error: any) {
+    console.error('[AUTH ERROR]:', error.message);
+    res.status(401).json({ error: 'Invalid or expired token', detail: error?.message });
   }
 };
 
