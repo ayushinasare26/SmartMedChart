@@ -64,9 +64,219 @@ async function main() {
 
   console.log('✅ Wards created');
 
-  // ═══════════════ USERS ═══════════════
+  // ═══════════════ USERS & HOSPITAL PERSONNEL ═══════════════
   const passwordHash = await bcrypt.hash('SmartMed@2024', 12);
 
+  // 1. Dr. Evelyn Vance, MD — Lead Hospital Administrator
+  const adminVance = await prisma.user.create({
+    data: {
+      email: 'evelyn.vance@metrohealth.org',
+      name: 'Dr. Evelyn Vance, MD',
+      role: 'ADMIN',
+      passwordHash,
+      staffId: 'ADM-9001',
+      title: 'Lead Hospital Administrator',
+      ward: 'Executive Suite - Governance',
+      department: 'Clinical Governance & Healthcare Administration',
+      specialty: 'Clinical Governance & Healthcare Administration',
+      licenseNumber: 'MD-ADM-9001',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 2. Arthur Hastings, MBA — Director of Hospital Operations
+  const adminHastings = await prisma.user.create({
+    data: {
+      email: 'arthur.hastings@metrohealth.org',
+      name: 'Arthur Hastings, MBA',
+      role: 'ADMIN',
+      passwordHash,
+      staffId: 'ADM-1002',
+      title: 'Director of Hospital Operations',
+      ward: 'Hospital Operations Bureau',
+      department: 'Hospital Operations & Staffing Bureau',
+      specialty: 'Staffing Logistics & Inpatient Flow',
+      licenseNumber: 'HOSP-OPS-44102',
+      shiftType: 'MORNING',
+      onDuty: false,
+      avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 3. Dr. Sarah Chen, MD — Consultant Physician
+  const drChen = await prisma.user.create({
+    data: {
+      email: 'sarah.chen@metrohealth.org',
+      name: 'Dr. Sarah Chen, MD',
+      role: 'DOCTOR',
+      passwordHash,
+      staffId: 'DOC-84729',
+      title: 'Consultant Physician',
+      ward: 'Ward 4B ICU',
+      department: 'Ward 4B - Internal Medicine',
+      specialty: 'Internal Medicine & Geriatrics',
+      licenseNumber: 'MD-98729-CA',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1594824813515-5389f47021eb?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 4. Dr. Rohan Ross, MD — Senior Cardiologist
+  const drRoss = await prisma.user.create({
+    data: {
+      email: 'rohan.ross@metrohealth.org',
+      name: 'Dr. Rohan Ross, MD',
+      role: 'DOCTOR',
+      passwordHash,
+      staffId: 'DOC-99120',
+      title: 'Senior Cardiologist',
+      ward: 'Cardiology CCU',
+      department: 'Cardiology & General Medicine',
+      specialty: 'Cardiology & Heart Failure',
+      licenseNumber: 'MD-99120-NY',
+      shiftType: 'ROTATING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 5. Dr. Marcus Singh, MD — Lead General Surgeon
+  const drSingh = await prisma.user.create({
+    data: {
+      email: 'marcus.singh@metrohealth.org',
+      name: 'Dr. Marcus Singh, MD',
+      role: 'DOCTOR',
+      passwordHash,
+      staffId: 'DOC-51029',
+      title: 'Lead General Surgeon',
+      ward: 'Acute Surgery Unit 3A',
+      department: 'Acute Surgery Unit 3A',
+      specialty: 'Trauma & General Surgery',
+      licenseNumber: 'MD-51029-TX',
+      shiftType: 'ROTATING',
+      onDuty: false,
+      avatarUrl: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 6. Dr. Aisha Patel, MD — Intensivist / Critical Care Specialist
+  const drAisha = await prisma.user.create({
+    data: {
+      email: 'aisha.patel@metrohealth.org',
+      name: 'Dr. Aisha Patel, MD',
+      role: 'DOCTOR',
+      passwordHash,
+      staffId: 'DOC-23921',
+      title: 'Intensivist / Critical Care Specialist',
+      ward: 'Ward 4B ICU',
+      department: 'ICU & Critical Care',
+      specialty: 'Critical Care & Resuscitation',
+      licenseNumber: 'MD-23921-IL',
+      shiftType: 'NIGHT',
+      onDuty: false,
+      avatarUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 7. Sarah Jenkins, RN — Staff Registered Nurse
+  const nurseJenkins = await prisma.user.create({
+    data: {
+      email: 'sarah.jenkins@metrohealth.org',
+      name: 'Sarah Jenkins, RN',
+      role: 'NURSE',
+      passwordHash,
+      staffId: 'RN-55219',
+      title: 'Staff Registered Nurse',
+      ward: 'Ward 4B (Acute Medicine)',
+      department: 'Ward 4B (Acute Medicine)',
+      specialty: 'Acute Inpatient Care & eMAR Administration',
+      licenseNumber: 'RN-55219-UK',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 8. Marcus Brody, RN — Ward Charge Nurse / Shift Lead
+  const nurseBrody = await prisma.user.create({
+    data: {
+      email: 'marcus.brody@metrohealth.org',
+      name: 'Marcus Brody, RN',
+      role: 'NURSE',
+      passwordHash,
+      staffId: 'CN-40192',
+      title: 'Ward Charge Nurse / Shift Lead',
+      ward: 'Ward 4B (Acute Medicine)',
+      department: 'Ward 4B (Acute Medicine)',
+      specialty: 'Ward Resource Management & Medication Safety',
+      licenseNumber: 'RN-40192-US',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 9. Priya Patel, BPharm — Lead Clinical Pharmacist
+  const pharmPriya = await prisma.user.create({
+    data: {
+      email: 'priya.patel.pharm@metrohealth.org',
+      name: 'Priya Patel, BPharm',
+      role: 'PHARMACIST',
+      passwordHash,
+      staffId: 'PH-31405',
+      title: 'Lead Clinical Pharmacist',
+      ward: 'Clinical Pharmacy Services',
+      department: 'Clinical Pharmacy Services',
+      specialty: 'Pharmacotherapy & Drug Interaction Triage',
+      licenseNumber: 'RPH-31405-GB',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 10. David Kim, MLS — Senior Medical Lab Technologist
+  const techKim = await prisma.user.create({
+    data: {
+      email: 'david.kim@metrohealth.org',
+      name: 'David Kim, MLS',
+      role: 'ALLIED_STAFF',
+      passwordHash,
+      staffId: 'LT-44201',
+      title: 'Senior Medical Lab Technologist',
+      ward: 'Central Pathology & Blood Bank',
+      department: 'Central Pathology & Blood Bank',
+      specialty: 'Diagnostic Hematology & Cross-matching',
+      licenseNumber: 'MLS-44201-ASCP',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 11. Elena Rostova, RT(R) — Lead Radiologic Technologist
+  const techRostova = await prisma.user.create({
+    data: {
+      email: 'elena.rostova@metrohealth.org',
+      name: 'Elena Rostova, RT(R)',
+      role: 'ALLIED_STAFF',
+      passwordHash,
+      staffId: 'RT-55102',
+      title: 'Lead Radiologic Technologist',
+      ward: 'Diagnostic Radiology & CT Imaging',
+      department: 'Diagnostic Radiology & CT Imaging',
+      specialty: 'Bedside Mobile X-Ray & CT Imaging',
+      licenseNumber: 'ARRT-55102',
+      shiftType: 'MORNING',
+      onDuty: false,
+      avatarUrl: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
+    },
+  });
+
+  // 12. Dr. V. Sharma, MD — Attending Intensivist
   const drSharma = await prisma.user.create({
     data: {
       email: 'sharma.md@metrohealth.org',
@@ -74,23 +284,18 @@ async function main() {
       role: 'DOCTOR',
       passwordHash,
       staffId: 'DR-4001',
-      ward: 'WARD-4B-ICU',
-      department: 'Pulmonology/CC',
+      title: 'Attending Intensivist',
+      ward: 'Ward 4B ICU',
+      department: 'Pulmonology / Critical Care',
+      specialty: 'Pulmonology & Intensive Care',
+      licenseNumber: 'MD-4001-IL',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
     },
   });
 
-  const drChen = await prisma.user.create({
-    data: {
-      email: 'rchen.phd@metrohealth.org',
-      name: 'Dr. Rachel Chen, Ph.D.',
-      role: 'DOCTOR',
-      passwordHash,
-      staffId: 'DR-4002',
-      ward: 'WARD-4B-SICU',
-      department: 'Lead Clinical Specialist',
-    },
-  });
-
+  // 13. Nurse Priya, RN — Primary Bedside BSN
   const nursePriya = await prisma.user.create({
     data: {
       email: 'priya.rn@metrohealth.org',
@@ -98,23 +303,18 @@ async function main() {
       role: 'NURSE',
       passwordHash,
       staffId: 'RN-8821',
-      ward: 'WARD-4B-ICU',
+      title: 'Primary Bedside BSN',
+      ward: 'Ward 4B ICU',
       department: 'ICU Ward 4B Primary',
+      specialty: 'Critical Care eMAR Administration',
+      licenseNumber: 'RN-8821-NY',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=150&auto=format&fit=crop&q=80',
     },
   });
 
-  const nurseJSmith = await prisma.user.create({
-    data: {
-      email: 'jsmith.rn@metrohealth.org',
-      name: 'Nurse J. Miller, RN',
-      role: 'NURSE',
-      passwordHash,
-      staffId: 'RN-9042',
-      ward: 'WARD-4B-ICU',
-      department: 'ICU Ward 4B',
-    },
-  });
-
+  // 14. Pharm. Dave P., PharmD — Clinical Pharmacist
   const pharmDave = await prisma.user.create({
     data: {
       email: 'dave.pharm@metrohealth.org',
@@ -122,11 +322,18 @@ async function main() {
       role: 'PHARMACIST',
       passwordHash,
       staffId: 'PH-2201',
-      ward: 'WARD-4B-ICU',
+      title: 'Clinical Pharmacist',
+      ward: 'Ward 4B ICU',
       department: 'Clinical Pharmacy',
+      specialty: 'High-Alert Med Verification & Infusion Safety',
+      licenseNumber: 'RPH-2201-CA',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
     },
   });
 
+  // 15. Admin Elena — Ward Supervisor
   const adminElena = await prisma.user.create({
     data: {
       email: 'elena.admin@metrohealth.org',
@@ -134,12 +341,18 @@ async function main() {
       role: 'ADMIN',
       passwordHash,
       staffId: 'ADM-0001',
-      ward: 'WARD-4B-ICU',
-      department: 'Ward Supervisor',
+      title: 'Ward Operations Supervisor',
+      ward: 'Ward 4B ICU',
+      department: 'Ward Administration',
+      specialty: 'Inpatient Scheduling & Bed Tracking',
+      licenseNumber: 'ADM-0001-IL',
+      shiftType: 'MORNING',
+      onDuty: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
     },
   });
 
-  console.log('✅ Users created');
+  console.log('✅ Users & Hospital Personnel created');
 
   // ═══════════════ PATIENTS ═══════════════
   const rahulPatil = await prisma.patient.create({

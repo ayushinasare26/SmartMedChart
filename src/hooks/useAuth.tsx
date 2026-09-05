@@ -9,14 +9,22 @@ interface User {
   staffId: string;
   ward?: string;
   department?: string;
+  title?: string;
+  specialty?: string;
+  licenseNumber?: string;
+  shiftType?: string;
+  onDuty?: boolean;
+  avatarUrl?: string;
 }
 
 interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (credentials: string | { email?: string; password?: string; adminId?: string; staffId?: string; pin?: string }, password?: string) => Promise<User>;
+  impersonate: (targetUserId?: string, targetStaffId?: string) => Promise<User>;
   logout: () => Promise<void>;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -30,14 +38,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (credentials: string | { email?: string; password?: string; adminId?: string; staffId?: string; pin?: string }, password?: string) => {
     setIsLoading(true);
     try {
-      const { data } = await api.post('/auth/login', { email, password });
+      const payload = typeof credentials === 'string' ? { email: credentials, password } : credentials;
+      const { data } = await api.post('/auth/login', payload);
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
       localStorage.setItem('user', JSON.stringify(data.user));
       setUser(data.user);
+      return data.user;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const impersonate = useCallback(async (targetUserId?: string, targetStaffId?: string) => {
+    setIsLoading(true);
+    try {
+      const { data } = await api.post('/auth/impersonate', { targetUserId, targetStaffId });
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setUser(data.user);
+      return data.user;
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, impersonate, logout, setUser }}>
       {children}
     </AuthContext.Provider>
   );

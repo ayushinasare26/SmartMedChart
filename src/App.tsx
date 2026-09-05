@@ -26,6 +26,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['ADMIN', 'DOCTOR']}><AdminPage /></ProtectedRoute>} />
 
       <Route
         element={
@@ -44,7 +45,6 @@ function App() {
         <Route path="/bedside-scan" element={<BedsideScannerPage />} />
         <Route path="/safety-audit" element={<SafetyAuditPage />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/admin" element={<ProtectedRoute allowedRoles={['ADMIN', 'DOCTOR']}><AdminPage /></ProtectedRoute>} />
         <Route path="/unauthorized" element={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 12 }}>
             <h2>Access Denied</h2>

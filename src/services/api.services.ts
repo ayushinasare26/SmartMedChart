@@ -1,8 +1,12 @@
 import api from '../api/client';
 
 export const authService = {
-  login: (email: string, password: string) =>
-    api.post('/auth/login', { email, password }).then(r => r.data),
+  login: (data: { email?: string; password?: string; adminId?: string; staffId?: string; pin?: string } | string, maybePassword?: string) => {
+    const payload = typeof data === 'string' ? { email: data, password: maybePassword } : data;
+    return api.post('/auth/login', payload).then(r => r.data);
+  },
+  impersonate: (targetUserId?: string, targetStaffId?: string) =>
+    api.post('/auth/impersonate', { targetUserId, targetStaffId }).then(r => r.data),
   logout: (refreshToken: string) =>
     api.post('/auth/logout', { refreshToken }),
   me: () => api.get('/auth/me').then(r => r.data),
@@ -101,9 +105,10 @@ export const reportService = {
 };
 
 export const userService = {
-  getAll: () => api.get('/users').then(r => r.data),
+  getAll: (params?: Record<string, string>) => api.get('/users', { params }).then(r => r.data),
   create: (data: any) => api.post('/users', data).then(r => r.data),
   update: (id: string, data: any) => api.patch(`/users/${id}`, data).then(r => r.data),
+  toggleDuty: (id: string) => api.patch(`/users/${id}/duty`).then(r => r.data),
 };
 
 export const wardService = {
