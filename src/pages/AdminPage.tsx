@@ -56,48 +56,17 @@ export default function AdminPage() {
   const [manualScanInput, setManualScanInput] = useState('');
   const [shortInfoRecord, setShortInfoRecord] = useState<{ type: 'STAFF' | 'PATIENT'; data: any } | null>(null);
 
-  // Auto-open enroll modal if ?enroll=true in URL
-  useEffect(() => {
-    if (searchParams.get('enroll') === 'true') {
-      setShowEnrollStaffModal(true);
-    }
-  }, [searchParams]);
+  // Fetch all staff users
+  const { data: staffList = [], isLoading: isStaffLoading } = useQuery<StaffUser[]>({
+    queryKey: ['all-staff-users'],
+    queryFn: () => userService.getAll(),
+  });
 
-  // Handle URL ?scan= parameter (e.g. when physical camera scans QR code)
-  useEffect(() => {
-    const scanParam = searchParams.get('scan');
-    if (scanParam && staffList.length > 0) {
-      const q = scanParam.trim().toLowerCase();
-      const s = staffList.find(u => u.staffId?.toLowerCase() === q || u.id.toLowerCase() === q);
-      if (s) {
-        setShortInfoRecord({ type: 'STAFF', data: s });
-        return;
-      }
-      const p = patientsList.find(pt => pt.mrn?.toLowerCase() === q || pt.id.toLowerCase() === q);
-      if (p) {
-        setShortInfoRecord({ type: 'PATIENT', data: p });
-        return;
-      }
-    }
-  }, [searchParams, staffList, patientsList]);
-
-  const handlePerformScan = (code: string) => {
-    const q = code.trim().toLowerCase();
-    if (!q) return;
-    const s = staffList.find(u => u.staffId?.toLowerCase() === q || u.id.toLowerCase() === q || u.name?.toLowerCase().includes(q));
-    if (s) {
-      setShowScannerModal(false);
-      setShortInfoRecord({ type: 'STAFF', data: s });
-      return;
-    }
-    const p = patientsList.find(pt => pt.mrn?.toLowerCase() === q || pt.id.toLowerCase() === q || pt.name?.toLowerCase().includes(q) || (pt.bed && pt.bed.toLowerCase().includes(q)));
-    if (p) {
-      setShowScannerModal(false);
-      setShortInfoRecord({ type: 'PATIENT', data: p });
-      return;
-    }
-    alert(`No matching hospital staff badge or admitted patient MRN found for: "${code}"`);
-  };
+  // Fetch all patients
+  const { data: patientsList = [], isLoading: isPatientsLoading } = useQuery<any[]>({
+    queryKey: ['all-inpatients-admin'],
+    queryFn: () => patientService.getAll(),
+  });
 
   // Form State for Staff Enrollment
   const [enrollForm, setEnrollForm] = useState({
@@ -129,58 +98,6 @@ export default function AdminPage() {
     npoStatus: false,
     isolationStatus: false,
     allergy: 'No Known Drug Allergies (NKDA)'
-  });
-
-  // Fetch all staff users
-  const { data: staffList = [], isLoading: isStaffLoading } = useQuery<StaffUser[]>({
-    queryKey: ['all-staff-users'],
-    queryFn: () => userService.getAll(),
-  });
-
-  // Fetch all patients
-  const { data: patientsList = [], isLoading: isPatientsLoading } = useQuery<any[]>({
-    queryKey: ['all-inpatients-admin'],
-    queryFn: () => patientService.getAll(),
-  });
-
-  // Staff Enrollment Mutation
-  const enrollMutation = useMutation({
-    mutationFn: (data: any) => userService.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-staff-users'] });
-      setShowEnrollStaffModal(false);
-      resetEnrollForm();
-    }
-  });
-
-  // Patient Admission Mutation
-  const admitMutation = useMutation({
-    mutationFn: (data: any) => patientService.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-inpatients-admin'] });
-      setShowAdmitPatientModal(false);
-      setAdmitForm({
-        name: '',
-        mrn: `940${Math.floor(20 + Math.random() * 80)}-${Math.floor(10 + Math.random() * 90)}`,
-        dob: '1979-03-14',
-        sex: 'Male',
-        weight: 72,
-        bed: 'Bed ICU-15',
-        admissionDiagnosis: 'Acute Inpatient Observation',
-        codeStatus: 'Full',
-        npoStatus: false,
-        isolationStatus: false,
-        allergy: 'No Known Drug Allergies (NKDA)'
-      });
-    }
-  });
-
-  // Duty Toggle Mutation
-  const dutyMutation = useMutation({
-    mutationFn: (id: string) => userService.toggleDuty(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-staff-users'] });
-    }
   });
 
   const resetEnrollForm = (presetRole = 'DOCTOR') => {
@@ -226,6 +143,89 @@ export default function AdminPage() {
     resetEnrollForm(presetRole);
     setShowEnrollStaffModal(true);
   };
+
+  // Staff Enrollment Mutation
+  const enrollMutation = useMutation({
+    mutationFn: (data: any) => userService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-staff-users'] });
+      setShowEnrollStaffModal(false);
+      resetEnrollForm();
+    }
+  });
+
+  // Patient Admission Mutation
+  const admitMutation = useMutation({
+    mutationFn: (data: any) => patientService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-inpatients-admin'] });
+      setShowAdmitPatientModal(false);
+      setAdmitForm({
+        name: '',
+        mrn: `940${Math.floor(20 + Math.random() * 80)}-${Math.floor(10 + Math.random() * 90)}`,
+        dob: '1979-03-14',
+        sex: 'Male',
+        weight: 72,
+        bed: 'Bed ICU-15',
+        admissionDiagnosis: 'Acute Inpatient Observation',
+        codeStatus: 'Full',
+        npoStatus: false,
+        isolationStatus: false,
+        allergy: 'No Known Drug Allergies (NKDA)'
+      });
+    }
+  });
+
+  // Duty Toggle Mutation
+  const dutyMutation = useMutation({
+    mutationFn: (id: string) => userService.toggleDuty(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-staff-users'] });
+    }
+  });
+
+  const handlePerformScan = (code: string) => {
+    const q = code.trim().toLowerCase();
+    if (!q) return;
+    const s = staffList.find(u => u.staffId?.toLowerCase() === q || u.id.toLowerCase() === q || u.name?.toLowerCase().includes(q));
+    if (s) {
+      setShowScannerModal(false);
+      setShortInfoRecord({ type: 'STAFF', data: s });
+      return;
+    }
+    const p = patientsList.find(pt => pt.mrn?.toLowerCase() === q || pt.id.toLowerCase() === q || pt.name?.toLowerCase().includes(q) || (pt.bed && pt.bed.toLowerCase().includes(q)));
+    if (p) {
+      setShowScannerModal(false);
+      setShortInfoRecord({ type: 'PATIENT', data: p });
+      return;
+    }
+    alert(`No matching hospital staff badge or admitted patient MRN found for: "${code}"`);
+  };
+
+  // Auto-open enroll modal if ?enroll=true in URL
+  useEffect(() => {
+    if (searchParams.get('enroll') === 'true') {
+      setShowEnrollStaffModal(true);
+    }
+  }, [searchParams]);
+
+  // Handle URL ?scan= parameter (e.g. when physical camera scans QR code)
+  useEffect(() => {
+    const scanParam = searchParams.get('scan');
+    if (scanParam && staffList.length > 0) {
+      const q = scanParam.trim().toLowerCase();
+      const s = staffList.find(u => u.staffId?.toLowerCase() === q || u.id.toLowerCase() === q);
+      if (s) {
+        setShortInfoRecord({ type: 'STAFF', data: s });
+        return;
+      }
+      const p = patientsList.find(pt => pt.mrn?.toLowerCase() === q || pt.id.toLowerCase() === q);
+      if (p) {
+        setShortInfoRecord({ type: 'PATIENT', data: p });
+        return;
+      }
+    }
+  }, [searchParams, staffList, patientsList]);
 
   // Impersonate Clinician
   const handleImpersonateStaff = async (targetUser: StaffUser) => {
