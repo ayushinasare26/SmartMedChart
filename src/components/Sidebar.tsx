@@ -73,7 +73,7 @@ export function Sidebar() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8,
-            background: 'linear-gradient(135deg, #1d4ed8, #7c3aed)',
+            background: 'linear-gradient(135deg, #0b4da2, #0284c7)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 14, fontWeight: 700, color: 'white'
           }}>S</div>
@@ -139,7 +139,7 @@ export function Sidebar() {
       </nav>
 
       {/* Ward Status */}
-      <div style={{ padding: '12px 14px', borderTop: '1px solid var(--color-border)', background: 'rgba(10,15,26,0.5)' }}>
+      <div style={{ padding: '12px 14px', borderTop: '1px solid var(--color-border)', background: '#f8fafc' }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Hospital Ward Status</div>
         <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
           <span style={{ color: 'var(--color-text-muted)' }}>LOCATION: </span>

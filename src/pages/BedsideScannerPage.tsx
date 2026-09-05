@@ -131,18 +131,40 @@ export default function BedsideScannerPage() {
           <div>
             {/* Patient Identity Banner */}
             {patient && (
-              <div style={{ background: '#050c1f', border: '2px solid var(--color-accent-blue)', borderRadius: 12, padding: '14px 20px', marginBottom: 20, display: 'flex', gap: 20, alignItems: 'center' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 10, background: '#1e2d4d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: 'var(--color-accent-blue-light)' }}>
+              <div style={{
+                background: '#0c1a30',
+                backgroundImage: 'linear-gradient(135deg, #0c1a30 0%, #0e274c 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 14,
+                padding: '16px 22px',
+                marginBottom: 20,
+                display: 'flex',
+                gap: 18,
+                alignItems: 'center',
+                boxShadow: '0 4px 14px rgba(12, 26, 48, 0.15)'
+              }}>
+                <div style={{
+                  width: 46,
+                  height: 46,
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, #0b4da2, #0284c7)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: '#ffffff'
+                }}>
                   {patient.name.split(' ').map((w: string) => w[0]).join('')}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                     <span style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>{patient.name}</span>
-                    <span style={{ background: '#1e2d4d', color: 'var(--color-accent-blue-light)', fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>ICU</span>
-                    <span style={{ background: '#1e2d4d', color: 'var(--color-text-secondary)', fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>Bed {patient.bed}</span>
-                    {patient.isolationStatus && <span style={{ background: 'var(--color-stat-red-bg)', color: 'var(--color-stat-red)', border: '1px solid var(--color-stat-red-border)', fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ISOLATION</span>}
+                    <span style={{ background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ICU</span>
+                    <span style={{ background: 'rgba(255, 255, 255, 0.1)', color: '#cbd5e1', fontSize: 11, padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace' }}>Bed {patient.bed}</span>
+                    {patient.isolationStatus && <span style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>ISOLATION</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
                     MRN: {patient.mrn} · DOB: {patient.dob ? format(new Date(patient.dob), 'dd-MMM-yyyy') : '—'} ({age}y) · Sex: {patient.sex} · Weight: {patient.weight}kg (Dose Basis) · Attending: Dr. Sharma, MD (Pulmonology/CC)
                   </div>
                   {patient.allergies?.length > 0 && (

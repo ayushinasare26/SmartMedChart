@@ -82,25 +82,59 @@ export default function PatientEMARPage() {
         )}
       </div>
 
-      {/* Patient Header */}
-      <div style={{ background: '#0d1420', borderBottom: '1px solid var(--color-border)', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ background: '#1e2d4d', borderRadius: 8, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-accent-blue-light)' }}>ICU</span>
+      {/* Patient Header Banner */}
+      <div style={{
+        background: '#0c1a30',
+        backgroundImage: 'linear-gradient(135deg, #0c1a30 0%, #0e274c 100%)',
+        margin: '16px 24px 0',
+        borderRadius: 14,
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        padding: '16px 24px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        boxShadow: '0 4px 14px rgba(12, 26, 48, 0.15)'
+      }}>
+        <div style={{
+          background: 'rgba(56, 189, 248, 0.15)',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
+          borderRadius: 8,
+          padding: '6px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#38bdf8' }}>ICU</span>
         </div>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 17, fontWeight: 800, color: 'white' }}>{patient.name}</span>
-            <span style={{ background: '#1e2d4d', color: 'var(--color-text-secondary)', fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>MRN: {patient.mrn}</span>
-            <span style={{ background: '#1e2d4d', color: 'var(--color-accent-blue-light)', fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>Bed {patient.bed}</span>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#ffffff' }}>{patient.name}</span>
+            <span style={{ background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', fontSize: 11, padding: '3px 8px', borderRadius: 4, fontFamily: 'monospace' }}>MRN: {patient.mrn}</span>
+            <span style={{ background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontSize: 11, padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>Bed {patient.bed}</span>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 3 }}>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
             {age}y · {patient.sex} · {patient.weight}kg · Dr. {patient.admissionDiagnosis ? `Sharma (Attending)` : '—'}
-            {patient.npoStatus && <span style={{ marginLeft: 8, color: 'var(--color-due-amber)', fontWeight: 700 }}>NPO Active</span>}
+            {patient.npoStatus && <span style={{ marginLeft: 8, color: '#f59e0b', fontWeight: 700 }}>NPO Active</span>}
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => navigate(`/bedside-scan?patientId=${patient.id}`)}>
-            <Scan size={13} /> Scan Patient Wristband
+          <button
+            onClick={() => navigate(`/bedside-scan?patientId=${patient.id}`)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              backgroundColor: '#ffffff',
+              color: '#0b4da2',
+              borderRadius: 8,
+              border: 'none',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            <Scan size={14} /> Scan Patient Wristband
           </button>
         </div>
       </div>
