@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -n \"API,WEB\" -c \"cyan,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "vite",
-    "dev:backend": "nodemon --watch server --ext ts --exec tsx server/server.ts",
+    "dev:backend": "nodemon --watch server --ext ts --exec tsx server/start.ts",
     "build": "prisma generate && vite build",
     "postinstall": "prisma generate",
     "preview": "vite preview",

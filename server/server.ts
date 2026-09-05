@@ -116,24 +116,5 @@ app.use('*', (req, res) => {
 // Error handler
 app.use(errorHandler);
 
-// Start server
-async function main() {
-  try {
-    await prisma.$connect();
-    console.log('✅ Connected to database via Prisma');
-    
-    app.listen(PORT, () => {
-      console.log(`🏥 SmartMedChart API running on http://localhost:${PORT}`);
-      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-    });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
-if (!process.env.VERCEL) {
-  main();
-}
-
+// Export express application
 export default app;
