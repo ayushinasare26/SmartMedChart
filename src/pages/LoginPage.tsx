@@ -45,7 +45,12 @@ export default function LoginPage() {
       else if (user.role === 'PHARMACIST') navigate('/prescriptions');
       else navigate('/admin');
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Authentication failed. Please check credentials.');
+      const respError = err?.response?.data?.error;
+      const errorMsg =
+        typeof respError === 'string'
+          ? respError
+          : respError?.message || err?.response?.data?.message || err?.message || 'Authentication failed. Please check credentials.';
+      setError(String(errorMsg));
     }
   };
 
