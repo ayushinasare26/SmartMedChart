@@ -45,22 +45,30 @@ const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 5000 : 500,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// Rate limiting (disabled on Vercel to prevent proxy validation exceptions)
+const isVercel = !!process.env.VERCEL;
+const noopMiddleware = (_req: any, _res: any, next: any) => next();
+
+const limiter = isVercel
+  ? noopMiddleware
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: process.env.NODE_ENV === 'development' ? 5000 : 500,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: false,
+    });
 app.use('/api/', limiter);
 
-// Auth rate limit (stricter)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'development' ? 1000 : 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+const authLimiter = isVercel
+  ? noopMiddleware
+  : rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: process.env.NODE_ENV === 'development' ? 1000 : 20,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: false,
+    });
 
 // Logging
 app.use(morgan('dev'));
@@ -69,24 +77,36 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
-app.get('/api/health', (_req, res) => {
+// Health check (supports both /api/health and /health)
+app.get(['/api/health', '/health'], (_req, res) => {
   res.json({ status: 'ok', service: 'SmartMedChart API', version: '2.4.1', timestamp: new Date().toISOString() });
 });
 
-// Routes
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/patients', patientRoutes);
-app.use('/api/prescriptions', prescriptionRoutes);
-app.use('/api/schedules', scheduleRoutes);
-app.use('/api/administrations', administrationRoutes);
-app.use('/api/alerts', alertRoutes);
-app.use('/api/audit', auditRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/wards', wardRoutes);
+// Routes — mounted on both /api/* and /* so any Vercel URL rewrite works
+const routes: Array<[string, any, any]> = [
+  ['/auth', authLimiter, authRoutes],
+  ['/users', null, userRoutes],
+  ['/patients', null, patientRoutes],
+  ['/prescriptions', null, prescriptionRoutes],
+  ['/schedules', null, scheduleRoutes],
+  ['/administrations', null, administrationRoutes],
+  ['/alerts', null, alertRoutes],
+  ['/audit', null, auditRoutes],
+  ['/notifications', null, notificationRoutes],
+  ['/dashboard', null, dashboardRoutes],
+  ['/reports', null, reportRoutes],
+  ['/wards', null, wardRoutes],
+];
+
+for (const [prefix, routeLimiter, router] of routes) {
+  if (routeLimiter && routeLimiter !== noopMiddleware) {
+    app.use(`/api${prefix}`, routeLimiter, router);
+    app.use(prefix, routeLimiter, router);
+  } else {
+    app.use(`/api${prefix}`, router);
+    app.use(prefix, router);
+  }
+}
 
 // 404 handler
 app.use('*', (req, res) => {

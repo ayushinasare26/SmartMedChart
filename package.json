@@ -8,6 +8,7 @@
     "dev:frontend": "vite",
     "dev:backend": "nodemon --watch server --ext ts --exec tsx server/server.ts",
     "build": "prisma generate && vite build",
+    "postinstall": "prisma generate",
     "preview": "vite preview",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",

@@ -12,7 +12,7 @@
   ],
   "functions": {
     "api/index.ts": {
-      "includeFiles": "prisma/**"
+      "includeFiles": "{node_modules/.prisma/client/**,prisma/**}"
     }
   }
 }
