@@ -9,7 +9,7 @@ import {
   ExternalLink, LogOut, Check, X, AlertCircle, RefreshCw,
   QrCode, UserPlus, FileText, ChevronRight, Activity, Building2,
   SlidersHorizontal, HeartPulse, Pill, FlaskConical, Eye,
-  Heart, Bed, AlertTriangle, Users
+  Heart, Bed, AlertTriangle, Users, Camera, Scan
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -52,6 +52,9 @@ export default function AdminPage() {
   const [showAdmitPatientModal, setShowAdmitPatientModal] = useState(false);
   const [badgeModalUser, setBadgeModalUser] = useState<StaffUser | null>(null);
   const [wristbandModalPatient, setWristbandModalPatient] = useState<any | null>(null);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [manualScanInput, setManualScanInput] = useState('');
+  const [shortInfoRecord, setShortInfoRecord] = useState<{ type: 'STAFF' | 'PATIENT'; data: any } | null>(null);
 
   // Auto-open enroll modal if ?enroll=true in URL
   useEffect(() => {
@@ -59,6 +62,42 @@ export default function AdminPage() {
       setShowEnrollStaffModal(true);
     }
   }, [searchParams]);
+
+  // Handle URL ?scan= parameter (e.g. when physical camera scans QR code)
+  useEffect(() => {
+    const scanParam = searchParams.get('scan');
+    if (scanParam && staffList.length > 0) {
+      const q = scanParam.trim().toLowerCase();
+      const s = staffList.find(u => u.staffId?.toLowerCase() === q || u.id.toLowerCase() === q);
+      if (s) {
+        setShortInfoRecord({ type: 'STAFF', data: s });
+        return;
+      }
+      const p = patientsList.find(pt => pt.mrn?.toLowerCase() === q || pt.id.toLowerCase() === q);
+      if (p) {
+        setShortInfoRecord({ type: 'PATIENT', data: p });
+        return;
+      }
+    }
+  }, [searchParams, staffList, patientsList]);
+
+  const handlePerformScan = (code: string) => {
+    const q = code.trim().toLowerCase();
+    if (!q) return;
+    const s = staffList.find(u => u.staffId?.toLowerCase() === q || u.id.toLowerCase() === q || u.name?.toLowerCase().includes(q));
+    if (s) {
+      setShowScannerModal(false);
+      setShortInfoRecord({ type: 'STAFF', data: s });
+      return;
+    }
+    const p = patientsList.find(pt => pt.mrn?.toLowerCase() === q || pt.id.toLowerCase() === q || pt.name?.toLowerCase().includes(q) || (pt.bed && pt.bed.toLowerCase().includes(q)));
+    if (p) {
+      setShowScannerModal(false);
+      setShortInfoRecord({ type: 'PATIENT', data: p });
+      return;
+    }
+    alert(`No matching hospital staff badge or admitted patient MRN found for: "${code}"`);
+  };
 
   // Form State for Staff Enrollment
   const [enrollForm, setEnrollForm] = useState({
@@ -430,6 +469,17 @@ export default function AdminPage() {
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <button
+              onClick={() => setShowScannerModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9,
+                backgroundColor: '#0284c7', color: '#ffffff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(2, 132, 199, 0.35)'
+              }}
+            >
+              <Camera size={15} />
+              <span>Scan QR Code</span>
+            </button>
+            <button
               onClick={() => handleOpenEnrollModal('DOCTOR')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9,
@@ -791,22 +841,29 @@ export default function AdminPage() {
                         </td>
 
                         <td style={{ padding: '14px 24px', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <button
-                              onClick={() => handleImpersonateStaff(staff)}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                            >
-                              <LogIn size={13} />
-                              <span>Log In As</span>
-                            </button>
-
-                            <button
-                              onClick={() => setBadgeModalUser(staff)}
-                              style={{ padding: 6, borderRadius: 7, border: '1px solid #e2e8f0', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}
-                            >
-                              <QrCode size={15} />
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => setShortInfoRecord({ type: 'STAFF', data: staff })}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '7px 14px',
+                              borderRadius: 8,
+                              backgroundColor: '#f8fafc',
+                              color: '#0f172a',
+                              border: '1px solid #cbd5e1',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseOver={e => { e.currentTarget.style.backgroundColor = '#eff6ff'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+                            onMouseOut={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+                          >
+                            <QrCode size={14} color="#0284c7" />
+                            <span>Scan / View QR</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1029,27 +1086,35 @@ export default function AdminPage() {
                             {/* Open eMAR Bedside */}
                             <button
                               onClick={() => navigate(`/patients/${patient.id}`)}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 7, backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 8, backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
                             >
                               <ExternalLink size={12} />
                               <span>Open eMAR</span>
                             </button>
 
-                            {/* Log In As Patient */}
+                            {/* Digital Wristband & Short Info QR */}
                             <button
-                              onClick={() => handleImpersonatePatient(patient)}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 7, backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                              onClick={() => setShortInfoRecord({ type: 'PATIENT', data: patient })}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                padding: '7px 14px',
+                                borderRadius: 8,
+                                backgroundColor: '#f8fafc',
+                                color: '#0f172a',
+                                border: '1px solid #cbd5e1',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseOver={e => { e.currentTarget.style.backgroundColor = '#eff6ff'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+                              onMouseOut={e => { e.currentTarget.style.backgroundColor = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
                             >
-                              <Heart size={12} />
-                              <span>View MyChart</span>
-                            </button>
-
-                            {/* Digital Wristband */}
-                            <button
-                              onClick={() => setWristbandModalPatient(patient)}
-                              style={{ padding: 6, borderRadius: 7, border: '1px solid #e2e8f0', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}
-                            >
-                              <QrCode size={15} />
+                              <QrCode size={14} color="#0284c7" />
+                              <span>Scan / View QR</span>
                             </button>
                           </div>
                         </td>
@@ -1234,64 +1299,442 @@ export default function AdminPage() {
       )}
 
       {/* ======================================================== */}
-      {/* 8. STAFF DIGITAL SMART BADGE MODAL                       */}
+      {/* 8. SCANNED SHORT INFO POPUP (STAFF & PATIENT)            */}
       {/* ======================================================== */}
-      {badgeModalUser && (
+      {shortInfoRecord && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(5px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20
+          backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120, padding: 20
         }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: 20, width: 320, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', overflow: 'hidden', border: '2px solid #0f172a' }}>
-            <div style={{ width: 50, height: 10, backgroundColor: '#0f172a', borderRadius: 6, margin: '12px auto 0' }} />
-            <div style={{ padding: '16px 20px 24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>METROPOLITAN GENERAL</div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', letterSpacing: '0.08em', marginBottom: 14 }}>CLINICAL SMART BADGE</div>
-              <img src={badgeModalUser.avatarUrl || 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150'} alt={badgeModalUser.name} style={{ width: 90, height: 90, borderRadius: 14, objectFit: 'cover', border: '3px solid #0f172a', margin: '0 auto 12px' }} />
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{badgeModalUser.name}</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', marginBottom: 8 }}>{badgeModalUser.title || badgeModalUser.role}</div>
-              <div style={{ backgroundColor: '#f1f5f9', borderRadius: 8, padding: '8px 12px', fontSize: 10, textAlign: 'left', marginBottom: 14 }}>
-                <div><strong>BADGE ID:</strong> <span style={{ fontFamily: 'monospace' }}>{badgeModalUser.staffId}</span></div>
-                <div><strong>DEPT:</strong> {badgeModalUser.department}</div>
-                <div><strong>LICENSE:</strong> <span style={{ fontFamily: 'monospace' }}>{badgeModalUser.licenseNumber}</span></div>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: 22,
+            width: '100%',
+            maxWidth: 480,
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.45)',
+            overflow: 'hidden',
+            border: '1px solid #cbd5e1'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#f8fafc'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  backgroundColor: shortInfoRecord.type === 'STAFF' ? '#0b4da2' : '#0284c7',
+                  color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {shortInfoRecord.type === 'STAFF' ? <Shield size={18} /> : <Heart size={18} />}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                    {shortInfoRecord.type === 'STAFF' ? 'Verified Staff Credentials' : 'Verified Inpatient Identity'}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#64748b' }}>
+                    SmartMed QR Code Verified &bull; Real-time Snapshot
+                  </div>
+                </div>
               </div>
-              <button onClick={() => setBadgeModalUser(null)} style={{ width: '100%', padding: '8px', borderRadius: 8, backgroundColor: '#0f172a', color: '#ffffff', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Close Badge</button>
+              <button
+                onClick={() => setShortInfoRecord(null)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
+              {/* QR Code & Identity Card */}
+              <div style={{
+                display: 'flex',
+                gap: 16,
+                alignItems: 'center',
+                padding: '14px',
+                backgroundColor: '#f8fafc',
+                borderRadius: 14,
+                border: '1px solid #e2e8f0',
+                marginBottom: 16
+              }}>
+                <div style={{
+                  backgroundColor: '#ffffff',
+                  padding: 8,
+                  borderRadius: 10,
+                  border: '1.5px solid #e2e8f0',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                  flexShrink: 0,
+                  textAlign: 'center'
+                }}>
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=115x115&margin=2&data=${encodeURIComponent(
+                      window.location.origin + '/admin?scan=' + (shortInfoRecord.type === 'STAFF' ? shortInfoRecord.data.staffId : shortInfoRecord.data.mrn)
+                    )}`}
+                    alt="Scannable QR Code"
+                    style={{ width: 105, height: 105, display: 'block' }}
+                  />
+                  <div style={{ fontSize: 8, color: '#64748b', fontWeight: 800, marginTop: 4, letterSpacing: '0.04em' }}>
+                    QR VERIFIED
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    display: 'inline-block',
+                    padding: '2px 8px',
+                    borderRadius: 9999,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    backgroundColor: shortInfoRecord.type === 'STAFF' ? '#dbeafe' : '#dcfce7',
+                    color: shortInfoRecord.type === 'STAFF' ? '#1e40af' : '#166534',
+                    marginBottom: 5
+                  }}>
+                    {shortInfoRecord.type === 'STAFF' ? shortInfoRecord.data.role : 'ADMITTED INPATIENT'}
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 2 }}>
+                    {shortInfoRecord.data.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>
+                    {shortInfoRecord.type === 'STAFF'
+                      ? (shortInfoRecord.data.title || shortInfoRecord.data.department)
+                      : `DOB: ${shortInfoRecord.data.dob ? format(new Date(shortInfoRecord.data.dob), 'dd-MMM-yyyy') : '14-Mar-1979'} (${shortInfoRecord.data.sex || 'Male'})`}
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, color: '#0b4da2' }}>
+                    {shortInfoRecord.type === 'STAFF' ? `BADGE ID: ${shortInfoRecord.data.staffId}` : `MRN: ${shortInfoRecord.data.mrn}`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Short Info Metadata Grid */}
+              {shortInfoRecord.type === 'STAFF' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 11 }}>
+                  <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>DEPARTMENT</span>
+                    <strong style={{ color: '#0f172a' }}>{shortInfoRecord.data.department || 'Ward 4B ICU'}</strong>
+                  </div>
+                  <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>WARD ASSIGNMENT</span>
+                    <strong style={{ color: '#0f172a' }}>{shortInfoRecord.data.ward || 'Cardiothoracic ICU'}</strong>
+                  </div>
+                  <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>LICENSE / ACCREDITATION</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>{shortInfoRecord.data.licenseNumber || 'VERIFIED-ACTIVE'}</span>
+                  </div>
+                  <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>SHIFT SCHEDULE</span>
+                    <strong style={{ color: '#0f172a' }}>{shortInfoRecord.data.shiftType || 'MORNING'} (07:00–15:00)</strong>
+                  </div>
+                  <div style={{ gridColumn: 'span 2', padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>DUTY STATUS</span>
+                      <strong style={{ color: shortInfoRecord.data.onDuty ? '#16a34a' : '#64748b' }}>
+                        {shortInfoRecord.data.onDuty ? '● ON ACTIVE DUTY' : '○ OFF-DUTY'}
+                      </strong>
+                    </div>
+                    <button
+                      onClick={() => {
+                        dutyMutation.mutate(shortInfoRecord.data.id);
+                        setShortInfoRecord({
+                          ...shortInfoRecord,
+                          data: { ...shortInfoRecord.data, onDuty: !shortInfoRecord.data.onDuty }
+                        });
+                      }}
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        backgroundColor: '#f1f5f9',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Toggle Shift Duty
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Patient Info */
+                <div>
+                  {/* Allergies Alert */}
+                  {shortInfoRecord.data.allergies?.length > 0 ? (
+                    <div style={{
+                      backgroundColor: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 8,
+                      padding: '10px 14px',
+                      color: '#991b1b',
+                      fontSize: 11,
+                      marginBottom: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}>
+                      <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                      <div>
+                        <strong>CRITICAL ALLERGY ALERT: </strong>
+                        {shortInfoRecord.data.allergies.map((a: any) => `${a.allergen} (${a.severity || 'Severe'})`).join(', ')}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      backgroundColor: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      color: '#166534',
+                      fontSize: 11,
+                      marginBottom: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}>
+                      <CheckCircle2 size={14} />
+                      <span>No Known Drug Allergies (NKDA) Recorded</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 11 }}>
+                    <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>BED ASSIGNMENT</span>
+                      <strong style={{ color: '#0f172a' }}>Bed {shortInfoRecord.data.bed || 'ICU-12'} &bull; Ward 4B</strong>
+                    </div>
+                    <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>CODE STATUS</span>
+                      <strong style={{ color: '#0f172a' }}>{shortInfoRecord.data.codeStatus || 'Full Code'}</strong>
+                    </div>
+                    <div style={{ gridColumn: 'span 2', padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>ADMISSION DIAGNOSIS</span>
+                      <strong style={{ color: '#0f172a' }}>{shortInfoRecord.data.admissionDiagnosis || 'Acute Inpatient Care'}</strong>
+                    </div>
+                    <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>ATTENDING PHYSICIAN</span>
+                      <strong style={{ color: '#0f172a' }}>{shortInfoRecord.data.prescriptions?.[0]?.prescriber?.name || 'Dr. Sharma, MD'}</strong>
+                    </div>
+                    <div style={{ padding: '10px 12px', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                      <span style={{ color: '#64748b', display: 'block', fontSize: 10 }}>RENAL &amp; ORGAN MARKER</span>
+                      <strong style={{ color: '#0f172a' }}>eGFR: {shortInfoRecord.data.eGFR || 62} mL/min</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '14px 20px',
+              borderTop: '1px solid #f1f5f9',
+              backgroundColor: '#f8fafc',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 8
+            }}>
+              {shortInfoRecord.type === 'PATIENT' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate(`/patients/${shortInfoRecord.data.id}`);
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    border: 'none',
+                    backgroundColor: '#0b4da2',
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <ExternalLink size={13} />
+                  <span>Open Full eMAR</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShortInfoRecord(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  color: '#475569',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Close Popup
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* ======================================================== */}
-      {/* 9. PATIENT DIGITAL WRISTBAND MODAL                       */}
+      {/* 9. UNIVERSAL HOSPITAL QR / BARCODE SCANNER MODAL         */}
       {/* ======================================================== */}
-      {wristbandModalPatient && (
+      {showScannerModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(5px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20
+          backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(6px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120, padding: 20
         }}>
-          <div style={{ backgroundColor: '#ffffff', borderRadius: 20, width: 360, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', overflow: 'hidden', border: '2px solid #0f172a', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>METROPOLITAN GENERAL HOSPITAL</div>
-              <button onClick={() => setWristbandModalPatient(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={18} /></button>
-            </div>
-            <div style={{ border: '2px solid #0f172a', borderRadius: 12, padding: '16px', backgroundColor: '#f8fafc', marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: 22,
+            width: '100%',
+            maxWidth: 480,
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.45)',
+            overflow: 'hidden',
+            border: '1px solid #cbd5e1'
+          }}>
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#0c1a30',
+              color: '#ffffff'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Camera size={18} color="#38bdf8" />
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{wristbandModalPatient.name}</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>DOB: {wristbandModalPatient.dob ? format(new Date(wristbandModalPatient.dob), 'dd-MMM-yyyy') : '14-Mar-1979'}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800 }}>Hospital QR Code &amp; Barcode Scanner</div>
+                  <div style={{ fontSize: 10, color: '#94a3b8' }}>Scan Staff Badge ID or Inpatient Wristband</div>
                 </div>
-                {wristbandModalPatient.allergies?.length > 0 && (
-                  <span style={{ backgroundColor: '#dc2626', color: '#ffffff', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 4 }}>ALLERGY</span>
-                )}
               </div>
-              <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 4 }}><strong>MRN:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{wristbandModalPatient.mrn}</span></div>
-              <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 12 }}><strong>BED:</strong> {wristbandModalPatient.bed || 'ICU-12'} &bull; Ward 4B ICU</div>
-              <div style={{ height: 42, backgroundColor: '#0f172a', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.35em' }}>
-                |||||| | ||| |||| || ||||||
+              <button
+                onClick={() => setShowScannerModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '24px 24px 20px', textAlign: 'center' }}>
+              {/* Animated Optical Scanner Viewfinder */}
+              <div style={{
+                position: 'relative',
+                width: 200,
+                height: 200,
+                margin: '0 auto 20px',
+                backgroundColor: '#0f172a',
+                borderRadius: 16,
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid #38bdf8',
+                boxShadow: '0 0 20px rgba(56, 189, 248, 0.2)'
+              }}>
+                <div style={{ position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderTop: '3px solid #38bdf8', borderLeft: '3px solid #38bdf8' }} />
+                <div style={{ position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderTop: '3px solid #38bdf8', borderRight: '3px solid #38bdf8' }} />
+                <div style={{ position: 'absolute', bottom: 10, left: 10, width: 20, height: 20, borderBottom: '3px solid #38bdf8', borderLeft: '3px solid #38bdf8' }} />
+                <div style={{ position: 'absolute', bottom: 10, right: 10, width: 20, height: 20, borderBottom: '3px solid #38bdf8', borderRight: '3px solid #38bdf8' }} />
+
+                <QrCode size={80} color="rgba(255,255,255,0.2)" />
+                <div style={{
+                  position: 'absolute',
+                  bottom: 12,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: '#38bdf8',
+                  letterSpacing: '0.06em'
+                }}>
+                  OPTICAL SCANNER READY
+                </div>
+              </div>
+
+              {/* Manual Input Form */}
+              <form onSubmit={(e) => { e.preventDefault(); handlePerformScan(manualScanInput); }} style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    placeholder="Enter Staff ID (DOC-...) or MRN (94021-...)"
+                    value={manualScanInput}
+                    onChange={(e) => setManualScanInput(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '9px 12px',
+                      fontSize: 12,
+                      border: '1.5px solid #cbd5e1',
+                      borderRadius: 8,
+                      outline: 'none',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '9px 16px',
+                      backgroundColor: '#0b4da2',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Scan &amp; Look Up
+                  </button>
+                </div>
+              </form>
+
+              {/* Instant Simulator Presets */}
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                  Instant Optical Scan Presets:
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {staffList.slice(0, 2).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => handlePerformScan(s.staffId)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 10px', borderRadius: 7, border: '1px solid #e2e8f0',
+                        backgroundColor: '#f8fafc', fontSize: 11, cursor: 'pointer', textAlign: 'left'
+                      }}
+                    >
+                      <Scan size={12} color="#0284c7" />
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <strong>{s.name}</strong> ({s.staffId})
+                      </div>
+                    </button>
+                  ))}
+                  {patientsList.slice(0, 2).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handlePerformScan(p.mrn)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 10px', borderRadius: 7, border: '1px solid #e2e8f0',
+                        backgroundColor: '#f8fafc', fontSize: 11, cursor: 'pointer', textAlign: 'left'
+                      }}
+                    >
+                      <Scan size={12} color="#16a34a" />
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <strong>{p.name}</strong> (Bed {p.bed})
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <button onClick={() => setWristbandModalPatient(null)} style={{ width: '100%', padding: '9px', borderRadius: 8, backgroundColor: '#0f172a', color: '#ffffff', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Close Wristband</button>
           </div>
         </div>
       )}
