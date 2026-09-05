@@ -1,14 +1,8 @@
 {
-  "version": 2,
   "rewrites": [
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ],
-  "functions": {
-    "api/**/*.ts": {
-      "includeFiles": "node_modules/.prisma/client/**"
-    }
-  }
+  ]
 }
