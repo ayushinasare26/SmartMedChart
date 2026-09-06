@@ -22,7 +22,7 @@ export const getSchedules = async (req: AuthRequest, res: Response, next: NextFu
     const startOfDay = new Date(targetDate); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(targetDate); endOfDay.setHours(23, 59, 59, 999);
 
-    const schedules = await prisma.medicationSchedule.findMany({
+    let schedules = await prisma.medicationSchedule.findMany({
       where: {
         ...(patientId && {
           OR: [
@@ -31,11 +31,35 @@ export const getSchedules = async (req: AuthRequest, res: Response, next: NextFu
           ],
         }),
         ...(status && { status: status as any }),
-        scheduledTime: { gte: startOfDay, lte: endOfDay },
+        ...(date && { scheduledTime: { gte: startOfDay, lte: endOfDay } }),
       },
       include: scheduleInclude,
       orderBy: { scheduledTime: 'asc' },
     });
+
+    // If looking for a patient's pending medications and none found, check active prescriptions and create pending schedules
+    if (patientId && schedules.filter(s => s.status === 'PENDING').length === 0) {
+      const patient = await prisma.patient.findFirst({
+        where: { OR: [{ id: patientId as string }, { mrn: patientId as string }] },
+        include: { prescriptions: { where: { status: { in: ['ACTIVE', 'STAT'] } } } },
+      });
+
+      if (patient && patient.prescriptions.length > 0) {
+        for (const rx of patient.prescriptions) {
+          const newSchedule = await prisma.medicationSchedule.create({
+            data: {
+              prescriptionId: rx.id,
+              patientId: patient.id,
+              scheduledTime: new Date(),
+              status: 'PENDING',
+            },
+            include: scheduleInclude,
+          });
+          schedules.push(newSchedule as any);
+        }
+      }
+    }
+
     res.json(schedules);
   } catch (error) { next(error); }
 };
@@ -83,9 +107,77 @@ export const administerMedication = async (req: AuthRequest, res: Response, next
     const { rightPatient, rightDrug, rightDose, rightRoute, rightTime } = fiveRights || {};
     const fiveRightsVerified = !!(rightPatient && rightDrug && rightDose && rightRoute && rightTime);
 
+    let finalSchedule = null;
+
+    if (scheduleId && !scheduleId.startsWith('rx-auto-')) {
+      finalSchedule = await prisma.medicationSchedule.findUnique({
+        where: { id: scheduleId },
+        include: { prescription: true },
+      });
+    }
+
+    if (!finalSchedule && patientId) {
+      finalSchedule = await prisma.medicationSchedule.findFirst({
+        where: {
+          OR: [
+            { patientId: patientId },
+            { patient: { mrn: patientId } },
+          ],
+          status: 'PENDING',
+        },
+        include: { prescription: true },
+      });
+
+      if (!finalSchedule) {
+        const patient = await prisma.patient.findFirst({
+          where: { OR: [{ id: patientId }, { mrn: patientId }] },
+          include: { prescriptions: { where: { status: { in: ['ACTIVE', 'STAT'] } } } },
+        });
+
+        if (patient && patient.prescriptions.length > 0) {
+          const rx = patient.prescriptions[0];
+          finalSchedule = await prisma.medicationSchedule.create({
+            data: {
+              prescriptionId: rx.id,
+              patientId: patient.id,
+              scheduledTime: new Date(),
+              status: 'PENDING',
+            },
+            include: { prescription: true },
+          });
+        }
+      }
+    }
+
+    if (!finalSchedule) {
+      res.status(404).json({ error: 'No schedule or prescription found for administration' });
+      return;
+    }
+
+    // If this schedule was already administered, create a new schedule instance for this administration to avoid unique constraint conflict
+    const existingAdmin = await prisma.administrationRecord.findUnique({
+      where: { scheduleId: finalSchedule.id },
+    });
+    if (existingAdmin) {
+      finalSchedule = await prisma.medicationSchedule.create({
+        data: {
+          prescriptionId: finalSchedule.prescriptionId,
+          patientId: finalSchedule.patientId,
+          scheduledTime: new Date(),
+          status: 'PENDING',
+        },
+        include: { prescription: true },
+      });
+    }
+
+    const finalPatientId = finalSchedule.patientId;
+    const finalDose = !isNaN(parseFloat(dose)) ? parseFloat(dose) : (finalSchedule.prescription?.dose || 1);
+    const finalUnit = unit || finalSchedule.prescription?.unit || 'mg';
+    const finalRoute = route || finalSchedule.prescription?.route || 'IV';
+
     // Update schedule
     const schedule = await prisma.medicationSchedule.update({
-      where: { id: scheduleId },
+      where: { id: finalSchedule.id },
       data: {
         status: 'GIVEN',
         administeredById: req.user!.id,
@@ -97,13 +189,13 @@ export const administerMedication = async (req: AuthRequest, res: Response, next
     // Create administration record
     const adminRecord = await prisma.administrationRecord.create({
       data: {
-        scheduleId,
-        patientId,
+        scheduleId: finalSchedule.id,
+        patientId: finalPatientId,
         administeredById: req.user!.id,
-        dose: parseFloat(dose),
-        unit,
-        route,
-        notes,
+        dose: finalDose,
+        unit: finalUnit,
+        route: finalRoute,
+        notes: notes || 'Administered via Bedside Scanner',
         fiveRightsVerified,
         rightPatient: !!rightPatient,
         rightDrug: !!rightDrug,
@@ -119,15 +211,29 @@ export const administerMedication = async (req: AuthRequest, res: Response, next
 
     await createAuditLog({
       userId: req.user?.id,
-      patientId,
+      patientId: finalPatientId,
       action: 'MEDICATION_ADMINISTERED',
       resource: 'Administration',
       resourceId: adminRecord.id,
-      detail: `${dose}${unit} ${route} administered. 5-Rights: ${fiveRightsVerified ? 'VERIFIED' : 'INCOMPLETE'}. Admin ID: ${adminRecord.adminId}`,
+      detail: `${finalDose}${finalUnit} ${finalRoute} administered. 5-Rights: ${fiveRightsVerified ? 'VERIFIED' : 'INCOMPLETE'}. Admin ID: ${adminRecord.adminId}`,
       req: req as any,
     });
 
-    res.status(201).json({ schedule, adminRecord });
+    const [fullSchedule, fullAdminRecord] = await Promise.all([
+      prisma.medicationSchedule.findUnique({
+        where: { id: finalSchedule.id },
+        include: scheduleInclude,
+      }),
+      prisma.administrationRecord.findUnique({
+        where: { id: adminRecord.id },
+        include: {
+          administeredBy: { select: { id: true, name: true, role: true, staffId: true } },
+          patient: { select: { id: true, name: true, mrn: true, bed: true } },
+        },
+      }),
+    ]);
+
+    res.status(201).json({ schedule: fullSchedule || schedule, adminRecord: fullAdminRecord || adminRecord });
   } catch (error) { next(error); }
 };
 

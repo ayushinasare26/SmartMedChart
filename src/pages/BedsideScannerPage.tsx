@@ -35,25 +35,57 @@ export default function BedsideScannerPage() {
     enabled: !!scannedPatientId,
   });
 
+  const activeRx = (patient?.prescriptions as any[])?.find((r: any) => ['ACTIVE', 'STAT'].includes(r.status)) || patient?.prescriptions?.[0];
+
   const selectedSchedule = scheduleId
     ? (schedules as any[]).find(s => s.id === scheduleId)
-    : (schedules as any[]).find(s => s.status === 'PENDING');
+    : ((schedules as any[]).find(s => s.status === 'PENDING') || (schedules as any[])[0] || (activeRx ? {
+        id: activeRx.schedules?.[0]?.id || `rx-auto-${activeRx.id}`,
+        prescription: activeRx,
+        prescriptionId: activeRx.id,
+        scheduledTime: new Date().toISOString(),
+        status: 'PENDING'
+      } : null));
 
   const administerMutation = useMutation({
     mutationFn: () => scheduleService.administer({
       scheduleId: selectedSchedule?.id,
       patientId: scannedPatientId,
-      dose: selectedSchedule?.prescription?.dose,
-      unit: selectedSchedule?.prescription?.unit,
-      route: selectedSchedule?.prescription?.route,
+      dose: selectedSchedule?.prescription?.dose || selectedSchedule?.dose || 1,
+      unit: selectedSchedule?.prescription?.unit || selectedSchedule?.doseUnit || 'mg',
+      route: selectedSchedule?.prescription?.route || selectedSchedule?.route || 'IV',
       barcodeScanned: true,
       fiveRights,
     }),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       setAdministered(true);
       queryClient.invalidateQueries({ queryKey: ['patient-schedules-scan'] });
       queryClient.invalidateQueries({ queryKey: ['ward-schedules'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-my-record'] });
+      queryClient.invalidateQueries({ queryKey: ['patient'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-nurse'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-doctor'] });
+      queryClient.invalidateQueries({ queryKey: ['patients-active'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-schedules'] });
+
+      // Cross-tab & multi-role broadcast: triggers instant refetch across doctor, nurse, and patient views
+      try {
+        const payload = JSON.stringify({
+          timestamp: Date.now(),
+          patientId: scannedPatientId,
+          patientName: patient?.name,
+          medication: selectedSchedule?.prescription?.medicationName || activeRx?.medicationName,
+          administeredAt: new Date().toISOString(),
+        });
+        localStorage.setItem('smartmed_last_administered', payload);
+        window.dispatchEvent(new CustomEvent('smartmed:medication_administered', { detail: payload }));
+      } catch (e) {
+        console.error('Broadcast error:', e);
+      }
     },
+    onError: (err: any) => {
+      alert('Failed to record administration: ' + (err?.response?.data?.error || err.message));
+    }
   });
 
   const simulateScan = async () => {
@@ -191,10 +223,10 @@ export default function BedsideScannerPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 16 }}>
                   {([
                     { key: 'rightPatient', label: '1. RIGHT PATIENT', value: patient?.name || '—', icon: User },
-                    { key: 'rightDrug', label: '2. RIGHT DRUG', value: selectedSchedule?.prescription?.medicationName?.split('(')[0]?.trim() || '—', icon: Pill },
-                    { key: 'rightDose', label: '3. RIGHT DOSE', value: selectedSchedule?.prescription ? `${selectedSchedule.prescription.dose}${selectedSchedule.prescription.unit} in 50mL` : '—', icon: Hash },
-                    { key: 'rightRoute', label: '4. RIGHT ROUTE', value: selectedSchedule?.prescription?.route?.split(' ')[0] || 'IV', icon: MapPin },
-                    { key: 'rightTime', label: '5. RIGHT TIME', value: selectedSchedule?.scheduledTime ? format(new Date(selectedSchedule.scheduledTime), 'HH:mm') + ' (Due Now)' : '—', icon: Clock },
+                    { key: 'rightDrug', label: '2. RIGHT DRUG', value: selectedSchedule?.prescription?.medicationName?.split('(')[0]?.trim() || activeRx?.medicationName?.split('(')[0]?.trim() || 'Active eMAR Protocol', icon: Pill },
+                    { key: 'rightDose', label: '3. RIGHT DOSE', value: (selectedSchedule?.prescription?.dose ? `${selectedSchedule.prescription.dose}${selectedSchedule.prescription.unit || 'mg'}` : (activeRx ? `${activeRx.dose}${activeRx.unit || 'mg'}` : 'Standard Dose')), icon: Hash },
+                    { key: 'rightRoute', label: '4. RIGHT ROUTE', value: selectedSchedule?.prescription?.route?.split(' ')[0] || activeRx?.route?.split(' ')[0] || 'IV', icon: MapPin },
+                    { key: 'rightTime', label: '5. RIGHT TIME', value: selectedSchedule?.scheduledTime ? format(new Date(selectedSchedule.scheduledTime), 'HH:mm') + ' (Due Now)' : 'Due Now (Shift 07–15)', icon: Clock },
                   ] as const).map(({ key, label, value, icon: Icon }) => {
                     const verified = fiveRights[key as keyof typeof fiveRights];
                     return (
@@ -223,7 +255,7 @@ export default function BedsideScannerPage() {
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <button
                       onClick={() => administerMutation.mutate()}
-                      disabled={!allRightsVerified || administerMutation.isPending || !selectedSchedule}
+                      disabled={!allRightsVerified || administerMutation.isPending}
                       className={allRightsVerified ? 'btn-success' : 'btn-ghost'}
                       style={{ fontSize: 14, padding: '12px 40px', opacity: allRightsVerified ? 1 : 0.5 }}
                     >

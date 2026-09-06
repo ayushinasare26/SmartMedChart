@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardService, scheduleService } from '../services/api.services';
 import { format } from 'date-fns';
@@ -28,17 +29,40 @@ function isDueNow(s: any) {
 
 export default function NurseDashboardPage() {
   const navigate = useNavigate();
-  const { data: stats, isLoading: statsLoading, refetch } = useQuery({
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
     queryKey: ['dashboard-nurse', WARD],
     queryFn: () => dashboardService.nurse({ ward: WARD }),
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
 
-  const { data: schedules = [], isLoading: schLoading } = useQuery({
+  const { data: schedules = [], isLoading: schLoading, refetch: refetchSchedules } = useQuery({
     queryKey: ['ward-schedules', WARD],
     queryFn: () => scheduleService.getWard({ ward: WARD }),
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
+
+  const refetch = () => {
+    refetchStats();
+    refetchSchedules();
+  };
+
+  // Cross-tab synchronization for bedside administrations
+  useEffect(() => {
+    const handleMedAdministered = () => {
+      refetch();
+    };
+    window.addEventListener('smartmed:medication_administered', handleMedAdministered);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'smartmed_last_administered') {
+        refetch();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('smartmed:medication_administered', handleMedAdministered);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   const isLoading = statsLoading || schLoading;
 

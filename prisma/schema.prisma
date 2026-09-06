@@ -108,6 +108,9 @@ model Patient {
   creatinine         Float?
   bilirubin          Float?
   platelets          Float?
+  emergencyContactName     String?
+  emergencyContactRelation String?
+  emergencyContactPhone    String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

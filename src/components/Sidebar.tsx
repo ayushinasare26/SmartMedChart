@@ -3,10 +3,12 @@ import { useAuth } from '../hooks/useAuth';
 import {
   LayoutDashboard, Users, FileText, Scan, Shield,
   LogOut, ChevronRight, Bell, Activity, BarChart2,
-  Settings, Pill
+  Settings, Pill, QrCode
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { notificationService } from '../services/api.services';
+import { useState } from 'react';
+import { HospitalPersonQRModal } from './HospitalPersonQRModal';
 
 const NAV_DOCTOR: Array<{ to: string; label: string; icon: any; badge?: string }> = [
   { to: '/doctor', label: 'Overview & Schedule', icon: LayoutDashboard },
@@ -61,6 +63,8 @@ export function Sidebar() {
   const roleInitials = (user?.name || 'U').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const roleColor = user?.role === 'DOCTOR' ? '#3b82f6' : user?.role === 'NURSE' ? '#10b981' : user?.role === 'PHARMACIST' ? '#8b5cf6' : '#f59e0b';
 
+  const [showStaffQRModal, setShowStaffQRModal] = useState(false);
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -87,26 +91,49 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* User card */}
-        <div style={{
-          background: 'var(--color-bg-hover)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 8, padding: '10px 12px',
-          display: 'flex', alignItems: 'center', gap: 8
-        }}>
+        {/* User card with QR action */}
+        <div
+          onClick={() => setShowStaffQRModal(true)}
+          style={{
+            background: 'var(--color-bg-hover)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 8, padding: '10px 12px',
+            display: 'flex', alignItems: 'center', gap: 8,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent-blue)')}
+          onMouseOut={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+          title="Click to view Official Hospital Staff QR Credential Badge"
+        >
           <div style={{
             width: 32, height: 32, borderRadius: '50%',
             background: roleColor,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 12, fontWeight: 700, color: 'white', flexShrink: 0
           }}>{roleInitials}</div>
-            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.name}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{user?.department}</div>
+            <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{user?.department || user?.role}</div>
           </div>
-          <ChevronRight size={14} color="var(--color-text-muted)" />
+          <div
+            style={{
+              padding: '3px 6px',
+              borderRadius: 5,
+              backgroundColor: 'rgba(56, 189, 248, 0.12)',
+              color: 'var(--color-accent-blue-light)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3,
+              fontSize: 10,
+              fontWeight: 700
+            }}
+          >
+            <QrCode size={12} />
+            <span>QR</span>
+          </div>
         </div>
       </div>
 
@@ -178,6 +205,26 @@ export function Sidebar() {
           Online Mode v2.4.1 · Production Node
         </div>
       </div>
+
+      {/* Logged-In Clinician Official QR Badge Modal */}
+      {user && (
+        <HospitalPersonQRModal
+          isOpen={showStaffQRModal}
+          onClose={() => setShowStaffQRModal(false)}
+          person={{
+            type: (user.role as any) || 'STAFF',
+            role: user.role,
+            name: user.name,
+            staffId: user.staffId,
+            title: user.title || `${user.role} Clinician`,
+            department: user.department || 'Ward 4B ICU',
+            specialty: user.specialty || 'General Clinical Care',
+            licenseNumber: user.licenseNumber || 'MD-98421-US',
+            shiftType: user.shiftType || 'MORNING (07:00–15:00)',
+            onDuty: user.onDuty !== false
+          }}
+        />
+      )}
     </aside>
   );
 }

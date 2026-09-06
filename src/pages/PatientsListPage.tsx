@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { patientService } from '../services/api.services';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Search, Plus, User } from 'lucide-react';
+import { AlertTriangle, Search, Plus, User, QrCode } from 'lucide-react';
 import { useState } from 'react';
 import { format, differenceInYears } from 'date-fns';
+import { HospitalPersonQRModal, HospitalPerson } from '../components/HospitalPersonQRModal';
 
 export default function PatientsListPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [selectedPatientForQR, setSelectedPatientForQR] = useState<HospitalPerson | null>(null);
 
   const { data: patients = [], isLoading } = useQuery({
     queryKey: ['patients-all'],
@@ -79,9 +81,45 @@ export default function PatientsListPage() {
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>MRN: {p.mrn} · {p.sex} · {age}y · {p.weight}kg</div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-accent-blue-light)' }}>Bed {p.bed}</div>
-                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>eGFR: {p.eGFR || '—'}</div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPatientForQR({
+                          type: 'PATIENT',
+                          name: p.name,
+                          mrn: p.mrn,
+                          dob: p.dob,
+                          sex: p.sex,
+                          bed: p.bed,
+                          ward: 'Ward 4B ICU',
+                          allergies: p.allergies,
+                          emergencyContactName: p.emergencyContactName,
+                          emergencyContactRelation: p.emergencyContactRelation,
+                          emergencyContactPhone: p.emergencyContactPhone,
+                          attendingName: 'Dr. V. Sharma, MD',
+                          admissionDiagnosis: p.admissionDiagnosis
+                        });
+                      }}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 7px',
+                        borderRadius: 5,
+                        backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                        border: '1px solid rgba(56, 189, 248, 0.25)',
+                        color: 'var(--color-accent-blue-light)',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                      title="View Patient Digital Wristband & QR Code"
+                    >
+                      <QrCode size={11} />
+                      <span>QR Wristband</span>
+                    </button>
                   </div>
                 </div>
 
@@ -127,6 +165,13 @@ export default function PatientsListPage() {
           </div>
         )}
       </div>
+
+      {/* Patient Digital Wristband & QR Modal */}
+      <HospitalPersonQRModal
+        isOpen={!!selectedPatientForQR}
+        onClose={() => setSelectedPatientForQR(null)}
+        person={selectedPatientForQR}
+      />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   Heart, Bed, AlertTriangle, Users, Camera, Scan
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface StaffUser {
   id: string;
@@ -1372,12 +1373,12 @@ export default function AdminPage() {
                   flexShrink: 0,
                   textAlign: 'center'
                 }}>
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=115x115&margin=2&data=${encodeURIComponent(
-                      window.location.origin + '/admin?scan=' + (shortInfoRecord.type === 'STAFF' ? shortInfoRecord.data.staffId : shortInfoRecord.data.mrn)
-                    )}`}
-                    alt="Scannable QR Code"
-                    style={{ width: 105, height: 105, display: 'block' }}
+                  <QRCodeSVG
+                    value={
+                      `${window.location.origin}/verify?id=${encodeURIComponent(shortInfoRecord.type === 'STAFF' ? (shortInfoRecord.data.staffId || shortInfoRecord.data.id) : (shortInfoRecord.data.mrn || shortInfoRecord.data.id))}&type=${shortInfoRecord.type}`
+                    }
+                    size={105}
+                    level="H"
                   />
                   <div style={{ fontSize: 8, color: '#64748b', fontWeight: 800, marginTop: 4, letterSpacing: '0.04em' }}>
                     QR VERIFIED

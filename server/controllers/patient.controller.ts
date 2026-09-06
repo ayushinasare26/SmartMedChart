@@ -24,6 +24,18 @@ export const getPatients = async (req: AuthRequest, res: Response, next: NextFun
           where: { status: { in: ['ACTIVE', 'STAT'] } },
           include: { prescriber: { select: { name: true } } },
         },
+        administrations: {
+          take: 1,
+          orderBy: { signedAt: 'desc' },
+          include: {
+            administeredBy: { select: { name: true, role: true } },
+            schedule: {
+              include: {
+                prescription: { select: { medicationName: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -73,15 +85,28 @@ export const getPatient = async (req: AuthRequest, res: Response, next: NextFunc
             prescriber: { select: { id: true, name: true, role: true } },
             schedules: {
               where: { status: { in: ['PENDING', 'GIVEN', 'HELD', 'DELAYED'] } },
+              include: {
+                administeredBy: { select: { id: true, name: true, role: true, staffId: true } },
+                administrationRecord: {
+                  include: {
+                    administeredBy: { select: { id: true, name: true, role: true, staffId: true } },
+                  },
+                },
+              },
               orderBy: { scheduledTime: 'asc' },
-              take: 20,
+              take: 25,
             },
           },
           orderBy: { createdAt: 'desc' },
         },
         administrations: {
           include: {
-            administeredBy: { select: { name: true, role: true, staffId: true } },
+            administeredBy: { select: { id: true, name: true, role: true, staffId: true } },
+            schedule: {
+              include: {
+                prescription: { select: { medicationName: true, dose: true, unit: true, route: true } },
+              },
+            },
           },
           orderBy: { signedAt: 'desc' },
           take: 20,
@@ -115,17 +140,42 @@ export const createPatient = async (req: AuthRequest, res: Response, next: NextF
 
 export const updatePatient = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const targetId = req.params.id === 'me' ? req.user?.id : req.params.id;
+    if (!targetId) {
+      res.status(400).json({ error: 'Patient ID required' });
+      return;
+    }
+
+    if (req.user?.role === 'PATIENT' && req.user?.id !== targetId) {
+      res.status(403).json({ error: 'Patients can only update their own records' });
+      return;
+    }
+
+    // If patient role, whitelist allowed editable fields
+    let updateData = req.body;
+    if (req.user?.role === 'PATIENT') {
+      updateData = {
+        ...(req.body.emergencyContactName !== undefined && { emergencyContactName: req.body.emergencyContactName }),
+        ...(req.body.emergencyContactRelation !== undefined && { emergencyContactRelation: req.body.emergencyContactRelation }),
+        ...(req.body.emergencyContactPhone !== undefined && { emergencyContactPhone: req.body.emergencyContactPhone }),
+      };
+    }
+
     const patient = await prisma.patient.update({
-      where: { id: req.params.id },
-      data: req.body,
+      where: { id: targetId },
+      data: updateData,
     });
+
+    const isContactUpdate = Boolean(req.body.emergencyContactPhone || req.body.emergencyContactName);
     await createAuditLog({
       userId: req.user?.id,
       patientId: patient.id,
-      action: 'PATIENT_UPDATED',
+      action: isContactUpdate ? 'EMERGENCY_CONTACT_UPDATED' : 'PATIENT_UPDATED',
       resource: 'Patient',
       resourceId: patient.id,
-      detail: `Patient record updated`,
+      detail: isContactUpdate
+        ? `Emergency contact updated for ${patient.name}: ${patient.emergencyContactName || 'N/A'} (${patient.emergencyContactPhone || 'N/A'})`
+        : `Patient record updated`,
       req: req as any,
     });
     res.json(patient);

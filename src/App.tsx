@@ -12,6 +12,7 @@ import SafetyAuditPage from './pages/SafetyAuditPage';
 import ReportsPage from './pages/ReportsPage';
 import AdminPage from './pages/AdminPage';
 import PatientPortalPage from './pages/PatientPortalPage';
+import PublicVerificationPage from './pages/PublicVerificationPage';
 import { useAuth } from './hooks/useAuth';
 
 function RoleRedirect() {
@@ -27,6 +28,7 @@ function RoleRedirect() {
 function App() {
   return (
     <Routes>
+      <Route path="/verify" element={<PublicVerificationPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['ADMIN', 'DOCTOR']}><AdminPage /></ProtectedRoute>} />
       <Route path="/patient-portal" element={<ProtectedRoute allowedRoles={['PATIENT', 'ADMIN', 'DOCTOR', 'NURSE']}><PatientPortalPage /></ProtectedRoute>} />

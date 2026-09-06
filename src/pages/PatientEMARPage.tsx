@@ -1,8 +1,10 @@
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { patientService, scheduleService } from '../services/api.services';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, differenceInMinutes } from 'date-fns';
-import { AlertTriangle, CheckCircle2, Clock, Scan, Shield, FileText, Activity, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Scan, Shield, FileText, Activity, ChevronLeft, PhoneCall, QrCode } from 'lucide-react';
+import { HospitalPersonQRModal } from '../components/HospitalPersonQRModal';
 
 function getStatusChip(status: string) {
   const map: Record<string, { bg: string; color: string; label: string }> = {
@@ -24,19 +26,43 @@ function getStatusChip(status: string) {
 export default function PatientEMARPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [showQRModal, setShowQRModal] = useState(false);
 
-  const { data: patient, isLoading: patientLoading } = useQuery({
+  const { data: patient, isLoading: patientLoading, refetch: refetchPatient } = useQuery({
     queryKey: ['patient', id],
     queryFn: () => patientService.getById(id!),
     enabled: !!id,
+    refetchInterval: 10000,
   });
 
-  const { data: schedules = [] } = useQuery({
+  const { data: schedules = [], refetch: refetchSchedules } = useQuery({
     queryKey: ['patient-schedules', id],
     queryFn: () => scheduleService.getAll({ patientId: id! }),
     enabled: !!id,
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
+
+  const refetchAll = () => {
+    refetchPatient();
+    refetchSchedules();
+  };
+
+  useEffect(() => {
+    const handleMedAdministered = () => {
+      refetchAll();
+    };
+    window.addEventListener('smartmed:medication_administered', handleMedAdministered);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'smartmed_last_administered') {
+        refetchAll();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('smartmed:medication_administered', handleMedAdministered);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [id]);
 
   if (!id) return (
     <div className="page-content" style={{ color: 'var(--color-text-muted)', paddingTop: 80, textAlign: 'center' }}>
@@ -112,12 +138,55 @@ export default function PatientEMARPage() {
             <span style={{ background: 'rgba(255,255,255,0.1)', color: '#e2e8f0', fontSize: 11, padding: '3px 8px', borderRadius: 4, fontFamily: 'monospace' }}>MRN: {patient.mrn}</span>
             <span style={{ background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontSize: 11, padding: '3px 8px', borderRadius: 4, fontWeight: 700 }}>Bed {patient.bed}</span>
           </div>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-            {age}y · {patient.sex} · {patient.weight}kg · Dr. {patient.admissionDiagnosis ? `Sharma (Attending)` : '—'}
-            {patient.npoStatus && <span style={{ marginLeft: 8, color: '#f59e0b', fontWeight: 700 }}>NPO Active</span>}
+          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span>{age}y &bull; {patient.sex} &bull; {patient.weight}kg &bull; Dr. {patient.admissionDiagnosis ? `Sharma (Attending)` : '—'}</span>
+            {patient.npoStatus && <span style={{ color: '#f59e0b', fontWeight: 700 }}>&bull; NPO Active</span>}
+            {(patient.emergencyContactPhone || patient.emergencyContactName) && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                color: '#fca5a5'
+              }}>
+                <PhoneCall size={11} style={{ color: '#f87171' }} />
+                <span>Emergency: {patient.emergencyContactName || 'Family'} ({patient.emergencyContactRelation || 'Proxy'}) &bull;</span>
+                <a
+                  href={`tel:${(patient.emergencyContactPhone || '').replace(/[^\d+]/g, '')}`}
+                  style={{ color: '#38bdf8', fontWeight: 700, textDecoration: 'none' }}
+                >
+                  {patient.emergencyContactPhone}
+                </a>
+              </span>
+            )}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowQRModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 14px',
+              backgroundColor: 'rgba(56, 189, 248, 0.15)',
+              color: '#38bdf8',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s'
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.25)')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'rgba(56, 189, 248, 0.15)')}
+          >
+            <QrCode size={14} />
+            <span>Digital Wristband &amp; QR</span>
+          </button>
           <button
             onClick={() => navigate(`/bedside-scan?patientId=${patient.id}`)}
             style={{
@@ -374,6 +443,29 @@ export default function PatientEMARPage() {
           </div>
         </div>
       </div>
+
+      {/* Patient Digital Wristband & QR Modal */}
+      {patient && (
+        <HospitalPersonQRModal
+          isOpen={showQRModal}
+          onClose={() => setShowQRModal(false)}
+          person={{
+            type: 'PATIENT',
+            name: patient.name,
+            mrn: patient.mrn,
+            dob: patient.dob,
+            sex: patient.sex,
+            bed: patient.bed,
+            ward: 'Ward 4B ICU',
+            allergies: patient.allergies,
+            emergencyContactName: patient.emergencyContactName,
+            emergencyContactRelation: patient.emergencyContactRelation,
+            emergencyContactPhone: patient.emergencyContactPhone,
+            attendingName: 'Dr. V. Sharma, MD',
+            admissionDiagnosis: patient.admissionDiagnosis
+          }}
+        />
+      )}
     </div>
   );
 }

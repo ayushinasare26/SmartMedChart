@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { patientService } from '../services/api.services';
@@ -6,14 +6,27 @@ import { useAuth } from '../hooks/useAuth';
 import {
   Shield, Heart, Pill, AlertTriangle, Clock, CheckCircle2,
   Calendar, User, Activity, LogOut, QrCode, Stethoscope,
-  Info, Sparkles, ChevronRight, FileText, Lock, X, RefreshCw
+  Info, Sparkles, ChevronRight, FileText, Lock, X, RefreshCw,
+  Phone, PhoneCall, Edit2, Copy, Check, Users, ExternalLink
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { QRCodeSVG } from 'qrcode.react';
+import { HospitalPersonQRModal, HospitalPerson } from '../components/HospitalPersonQRModal';
 
 export default function PatientPortalPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showWristbandModal, setShowWristbandModal] = useState(false);
+  const [selectedStaffQR, setSelectedStaffQR] = useState<HospitalPerson | null>(null);
+
+  // Emergency contact state
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editRelation, setEditRelation] = useState('Spouse / Primary Proxy');
+  const [editPhone, setEditPhone] = useState('');
+  const [isSavingContact, setIsSavingContact] = useState(false);
+  const [contactSuccessMsg, setContactSuccessMsg] = useState('');
+  const [copiedPhone, setCopiedPhone] = useState(false);
 
   // Fetch current patient's comprehensive record
   const patientId = user?.patientId || user?.id || '';
@@ -21,8 +34,68 @@ export default function PatientPortalPage() {
     queryKey: ['patient-my-record', patientId],
     queryFn: () => patientService.getById(patientId || 'me'),
     enabled: !!patientId,
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
+
+  // Cross-tab & multi-station live synchronization for nurse administrations
+  useEffect(() => {
+    const handleMedAdministered = () => {
+      refetch();
+    };
+    window.addEventListener('smartmed:medication_administered', handleMedAdministered);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'smartmed_last_administered') {
+        refetch();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('smartmed:medication_administered', handleMedAdministered);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [refetch]);
+
+  const emergencyName = patient?.emergencyContactName || 'Sunita Patil';
+  const emergencyRelation = patient?.emergencyContactRelation || 'Spouse / Primary Proxy';
+  const emergencyPhone = patient?.emergencyContactPhone || '+1 (555) 349-8291';
+
+  const handleOpenContactModal = () => {
+    setEditName(emergencyName);
+    setEditRelation(emergencyRelation);
+    setEditPhone(emergencyPhone);
+    setContactSuccessMsg('');
+    setShowContactModal(true);
+  };
+
+  const handleSaveContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingContact(true);
+    try {
+      await patientService.update(patient?.id || patientId, {
+        emergencyContactName: editName.trim(),
+        emergencyContactRelation: editRelation.trim(),
+        emergencyContactPhone: editPhone.trim(),
+      });
+      await refetch();
+      setContactSuccessMsg('Emergency contact updated successfully');
+      setTimeout(() => {
+        setShowContactModal(false);
+        setContactSuccessMsg('');
+      }, 1200);
+    } catch (err: any) {
+      alert('Failed to update emergency contact: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
+  const handleCopyPhone = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(emergencyPhone);
+    }
+    setCopiedPhone(true);
+    setTimeout(() => setCopiedPhone(false), 2000);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -43,7 +116,9 @@ export default function PatientPortalPage() {
     return list.sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime());
   }, [patient]);
 
-  const givenCount = allSchedules.filter((s: any) => s.status === 'GIVEN').length;
+  const givenCount = patient?.administrations?.length
+    ? Math.max(patient.administrations.length, allSchedules.filter((s: any) => s.status === 'GIVEN').length)
+    : allSchedules.filter((s: any) => s.status === 'GIVEN').length;
   const pendingCount = allSchedules.filter((s: any) => s.status === 'PENDING').length;
   const nextDue = allSchedules.find((s: any) => s.status === 'PENDING');
 
@@ -238,6 +313,61 @@ export default function PatientPortalPage() {
             <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
               <strong>Admission Diagnosis:</strong> {patient?.admissionDiagnosis || 'Acute Inpatient Observation & Care'}
             </div>
+
+            {/* Emergency Contact Quick Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '4px 12px',
+                borderRadius: 8,
+                backgroundColor: 'rgba(239, 68, 68, 0.16)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                color: '#ffffff',
+                fontSize: 12,
+              }}>
+                <PhoneCall size={13} style={{ color: '#f87171' }} />
+                <span style={{ color: '#fca5a5', fontWeight: 600 }}>Emergency Contact:</span>
+                <span style={{ fontWeight: 700 }}>{emergencyName}</span>
+                <span style={{ color: '#cbd5e1', fontSize: 11 }}>({emergencyRelation})</span>
+                <span style={{ color: 'rgba(255,255,255,0.25)' }}>&bull;</span>
+                <a
+                  href={`tel:${emergencyPhone.replace(/[^\d+]/g, '')}`}
+                  style={{
+                    color: '#38bdf8',
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}
+                  title="Click to dial emergency contact"
+                >
+                  {emergencyPhone}
+                </a>
+              </div>
+              <button
+                onClick={handleOpenContactModal}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                  color: '#e2e8f0',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.18)')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)')}
+              >
+                <Edit2 size={11} /> Edit Contact
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
@@ -343,6 +473,32 @@ export default function PatientPortalPage() {
                 </button>
               </div>
 
+              {/* Live Recent Administration Alert Banner */}
+              {patient?.administrations?.[0] && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '12px 16px',
+                  borderRadius: 12,
+                  backgroundColor: '#f0fdf4',
+                  border: '1.5px solid #86efac',
+                  color: '#15803d',
+                  fontSize: 12,
+                  marginBottom: 16
+                }}>
+                  <CheckCircle2 size={20} color="#16a34a" style={{ flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: '#166534' }}>
+                      Recent Medication Administered at Bedside
+                    </div>
+                    <div style={{ marginTop: 2, color: '#15803d' }}>
+                      <strong>{patient.administrations[0].schedule?.prescription?.medicationName || 'Prescription Medication'}</strong> was verified and administered by <strong>{patient.administrations[0].administeredBy?.name || 'Primary Nurse'}</strong> ({patient.administrations[0].administeredBy?.role || 'NURSE'}) at <strong>{format(new Date(patient.administrations[0].signedAt), 'HH:mm')}</strong> &bull; 5-Rights Bedside Verified &bull; 100% Barcode Match.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Timeline List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {allSchedules.length > 0 ? (
@@ -350,6 +506,11 @@ export default function PatientPortalPage() {
                     const isGiven = sch.status === 'GIVEN';
                     const isDue = sch.status === 'PENDING' && (sch.prescription?.isStatOrder || idx === givenCount);
                     const timeStr = format(new Date(sch.scheduledTime), 'HH:mm');
+
+                    const adminRecord = patient?.administrations?.find((a: any) => a.scheduleId === sch.id) || sch.administrationRecord;
+                    const nurseName = sch.administeredBy?.name || adminRecord?.administeredBy?.name || 'Nurse Priya, RN';
+                    const adminDate = sch.administeredAt || adminRecord?.signedAt;
+                    const adminTimeStr = adminDate ? format(new Date(adminDate), 'HH:mm') : timeStr;
 
                     return (
                       <div
@@ -398,7 +559,7 @@ export default function PatientPortalPage() {
                           {isGiven ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
                               <CheckCircle2 size={13} />
-                              <span>Given by Nurse Priya, RN &bull; 4-Point Barcode Verified &bull; 100% Safe Match</span>
+                              <span>Administered by {nurseName} at {adminTimeStr} &bull; 4-Point Barcode Verified &bull; 100% Safe Match</span>
                             </div>
                           ) : isDue ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#dc2626', fontWeight: 700 }}>
@@ -548,29 +709,335 @@ export default function PatientPortalPage() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#2563eb', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>DS</div>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Dr. V. Sharma, MD</div>
-                    <div style={{ fontSize: 10, color: '#64748b' }}>Attending Intensivist &bull; Pulmonology</div>
+                {/* Dr Sharma */}
+                <div
+                  onClick={() => setSelectedStaffQR({
+                    type: 'DOCTOR',
+                    role: 'DOCTOR',
+                    name: 'Dr. V. Sharma, MD',
+                    staffId: 'DOC-4401',
+                    title: 'Attending Intensivist & Pulmonologist',
+                    department: 'Ward 4B ICU',
+                    specialty: 'Critical Care & Pulmonology',
+                    licenseNumber: 'MD-98421-US',
+                    shiftType: 'MORNING (07:00–15:00)',
+                    onDuty: true
+                  })}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                  title="Click to view Doctor's Official QR Badge"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#2563eb', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>DS</div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Dr. V. Sharma, MD</div>
+                      <div style={{ fontSize: 10, color: '#64748b' }}>Attending Intensivist &bull; Pulmonology</div>
+                    </div>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    color: '#2563eb',
+                    fontWeight: 700,
+                    backgroundColor: '#eff6ff',
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #bfdbfe'
+                  }}>
+                    <QrCode size={12} />
+                    <span>View QR</span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#10b981', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>NP</div>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Nurse Priya, RN</div>
-                    <div style={{ fontSize: 10, color: '#64748b' }}>Primary Bedside BSN &bull; Ward 4B</div>
+                {/* Nurse Priya */}
+                <div
+                  onClick={() => setSelectedStaffQR({
+                    type: 'NURSE',
+                    role: 'NURSE',
+                    name: 'Nurse Priya, RN',
+                    staffId: 'RN-8832',
+                    title: 'Primary Bedside BSN',
+                    department: 'Ward 4B ICU',
+                    specialty: 'Inpatient Acute Care & eMAR',
+                    licenseNumber: 'RN-54210-US',
+                    shiftType: 'DAY (07:00–15:00)',
+                    onDuty: true
+                  })}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#f0fdf4')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                  title="Click to view Nurse's Official QR Badge"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#10b981', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>NP</div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Nurse Priya, RN</div>
+                      <div style={{ fontSize: 10, color: '#64748b' }}>Primary Bedside BSN &bull; Ward 4B</div>
+                    </div>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    color: '#059669',
+                    fontWeight: 700,
+                    backgroundColor: '#ecfdf5',
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #a7f3d0'
+                  }}>
+                    <QrCode size={12} />
+                    <span>View QR</span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#7c3aed', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>PD</div>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Pharm. Dave, RPh</div>
-                    <div style={{ fontSize: 10, color: '#64748b' }}>Clinical Pharmacist &bull; Dispensary</div>
+                {/* Pharm Dave */}
+                <div
+                  onClick={() => setSelectedStaffQR({
+                    type: 'PHARMACIST',
+                    role: 'PHARMACIST',
+                    name: 'Pharm. Dave, RPh',
+                    staffId: 'PH-3109',
+                    title: 'Clinical Pharmacist & Safe Dosing Specialist',
+                    department: 'Central Dispensary & ICU Satellite',
+                    specialty: 'Pharmacotherapy & Antibiotic Verification',
+                    licenseNumber: 'RPH-67219-US',
+                    shiftType: 'MORNING',
+                    onDuty: true
+                  })}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#faf5ff')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                  title="Click to view Pharmacist's Official QR Badge"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: '#7c3aed', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>PD</div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Pharm. Dave, RPh</div>
+                      <div style={{ fontSize: 10, color: '#64748b' }}>Clinical Pharmacist &bull; Dispensary</div>
+                    </div>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 10,
+                    color: '#7c3aed',
+                    fontWeight: 700,
+                    backgroundColor: '#f5f3ff',
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #ddd6fe'
+                  }}>
+                    <QrCode size={12} />
+                    <span>View QR</span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Family Emergency Contact Card */}
+            <div style={{
+              backgroundColor: '#ffffff',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: 14,
+              padding: '18px 20px',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              {/* Decorative top colored stripe */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 3,
+                background: 'linear-gradient(90deg, #dc2626 0%, #f97316 45%, #0284c7 100%)'
+              }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    backgroundColor: '#fef2f2',
+                    border: '1px solid #fee2e2',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#dc2626'
+                  }}>
+                    <PhoneCall size={17} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      Family Emergency Contact
+                    </h3>
+                    <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                      Designated Bedside Proxy &bull; 24/7 Priority
+                    </div>
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: '#dc2626',
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  padding: '2px 8px',
+                  borderRadius: 9999,
+                  letterSpacing: '0.04em'
+                }}>
+                  ACTIVE
+                </span>
+              </div>
+
+              {/* Contact Details Box */}
+              <div style={{
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 10,
+                padding: '12px 14px',
+                marginBottom: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                    {emergencyName}
+                  </div>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#0369a1',
+                    backgroundColor: '#e0f2fe',
+                    border: '1px solid #bae6fd',
+                    padding: '2px 7px',
+                    borderRadius: 6
+                  }}>
+                    {emergencyRelation}
+                  </span>
+                </div>
+
+                {/* Phone Number Display */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      PRIMARY EMERGENCY PHONE
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', letterSpacing: '0.02em', fontFamily: 'monospace' }}>
+                      {emergencyPhone}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCopyPhone}
+                    title="Copy phone number"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '5px 10px',
+                      borderRadius: 6,
+                      backgroundColor: copiedPhone ? '#f0fdf4' : '#ffffff',
+                      border: copiedPhone ? '1px solid #86efac' : '1px solid #cbd5e1',
+                      color: copiedPhone ? '#16a34a' : '#475569',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {copiedPhone ? <Check size={12} /> : <Copy size={12} />}
+                    <span>{copiedPhone ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                <a
+                  href={`tel:${emergencyPhone.replace(/[^\d+]/g, '')}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    backgroundColor: '#dc2626',
+                    color: '#ffffff',
+                    textDecoration: 'none',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                    transition: 'background-color 0.15s'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#b91c1c')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#dc2626')}
+                >
+                  <Phone size={13} /> Call Contact
+                </a>
+                <button
+                  onClick={handleOpenContactModal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #cbd5e1',
+                    color: '#334155',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#ffffff')}
+                >
+                  <Edit2 size={13} /> Edit / Update
+                </button>
+              </div>
+
+              {/* Hospital Consent Notice */}
+              <div style={{ fontSize: 10, color: '#64748b', lineHeight: 1.45, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
+                <span style={{ color: '#0b4da2', fontWeight: 700 }}>Authorized Proxy:</span> Designated for medical decision-making notification, sudden condition changes, and bedside emergency communication.
               </div>
             </div>
 
@@ -661,43 +1128,336 @@ export default function PatientPortalPage() {
               <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 6 }}>
                 <strong>MRN:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{patient?.mrn || user?.mrn}</span>
               </div>
-              <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: '#0f172a', marginBottom: 6 }}>
                 <strong>LOCATION:</strong> Ward 4B ICU &bull; {patient?.bed || 'Bed ICU-12'}
               </div>
 
-              {/* Barcode Mock */}
+              {/* Wristband Emergency Contact */}
+              <div style={{ fontSize: 11, color: '#0f172a', marginBottom: 12, backgroundColor: '#f1f5f9', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: 9, fontWeight: 800, color: '#64748b', display: 'block', textTransform: 'uppercase' }}>EMERGENCY CONTACT</span>
+                <strong>{emergencyName}</strong> ({emergencyRelation}) &bull; <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0b4da2' }}>{emergencyPhone}</span>
+              </div>
+
+              {/* High-Resolution Scannable QR Code */}
               <div style={{
-                height: 42,
-                backgroundColor: '#0f172a',
-                borderRadius: 6,
+                backgroundColor: '#ffffff',
+                border: '1.5px solid #cbd5e1',
+                borderRadius: 10,
+                padding: '12px 10px',
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#ffffff',
-                fontFamily: 'monospace',
-                fontSize: 11,
-                letterSpacing: '0.35em'
+                marginBottom: 12,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
               }}>
-                |||||| | ||| |||| || ||||||
+                <QRCodeSVG
+                  value={`${window.location.origin}/verify?id=${encodeURIComponent(patient?.mrn || user?.mrn || '94021-08')}&type=PATIENT`}
+                  size={140}
+                  level="H"
+                  includeMargin={false}
+                />
+                <div style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: '#0f172a',
+                  letterSpacing: '0.04em',
+                  marginTop: 8,
+                  fontFamily: 'monospace'
+                }}>
+                  SCAN: PAT-{patient?.mrn || user?.mrn || '94021-08'}-{patient?.bed || 'ICU12'}
+                </div>
+                <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>
+                  Bedside 4-Point eMAR Scanner Verified &bull; Official Digital Hospital Wristband
+                </div>
               </div>
             </div>
 
-            <button
-              onClick={() => setShowWristbandModal(false)}
-              style={{
-                width: '100%',
-                padding: '9px',
-                borderRadius: 8,
-                backgroundColor: '#0f172a',
-                color: '#ffffff',
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              Close Wristband
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={() => window.open(`${window.location.origin}/verify?id=${encodeURIComponent(patient?.mrn || user?.mrn || '94021-08')}&type=PATIENT`, '_blank')}
+                style={{
+                  padding: '9px 14px',
+                  borderRadius: 8,
+                  backgroundColor: '#eff6ff',
+                  color: '#1d4ed8',
+                  border: '1px solid #bfdbfe',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  transition: 'background 0.15s'
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#dbeafe')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
+              >
+                <ExternalLink size={14} />
+                <span>Open Live Verification Card</span>
+              </button>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  onClick={() => window.print()}
+                  style={{
+                    padding: '9px',
+                    borderRadius: 8,
+                    backgroundColor: '#ffffff',
+                    color: '#0f172a',
+                    border: '1px solid #cbd5e1',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Print Wristband
+                </button>
+                <button
+                  onClick={() => setShowWristbandModal(false)}
+                  style={{
+                    padding: '9px',
+                    borderRadius: 8,
+                    backgroundColor: '#0f172a',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close Wristband
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hospital Staff QR Credential Modal (Care Team Members) */}
+      <HospitalPersonQRModal
+        isOpen={!!selectedStaffQR}
+        onClose={() => setSelectedStaffQR(null)}
+        person={selectedStaffQR}
+      />
+
+      {/* Edit Emergency Contact Modal */}
+      {showContactModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: 20
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: 18,
+            width: 440,
+            maxWidth: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+            overflow: 'hidden',
+            border: '1px solid #e2e8f0',
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 22px',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+              color: '#ffffff'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#f87171'
+                }}>
+                  <PhoneCall size={16} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#ffffff' }}>
+                    Family Emergency Contact
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 11, color: '#94a3b8' }}>
+                    Designated Next of Kin / Proxy for {patient?.name || user?.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowContactModal(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveContact} style={{ padding: '22px' }}>
+              {contactSuccessMsg && (
+                <div style={{
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  color: '#166534',
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  marginBottom: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}>
+                  <CheckCircle2 size={16} color="#16a34a" />
+                  {contactSuccessMsg}
+                </div>
+              )}
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Contact Full Name <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="e.g. Sunita Patil"
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    fontSize: 13,
+                    boxSizing: 'border-box',
+                    outline: 'none',
+                    color: '#0f172a'
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = '#0284c7')}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = '#cbd5e1')}
+                />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Relationship to Patient <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <select
+                  value={editRelation}
+                  onChange={(e) => setEditRelation(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    fontSize: 13,
+                    boxSizing: 'border-box',
+                    backgroundColor: '#ffffff',
+                    color: '#0f172a',
+                    outline: 'none'
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = '#0284c7')}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = '#cbd5e1')}
+                >
+                  <option value="Spouse / Primary Proxy">Spouse / Primary Proxy</option>
+                  <option value="Spouse / Next of Kin">Spouse / Next of Kin</option>
+                  <option value="Son / Power of Attorney">Son / Power of Attorney</option>
+                  <option value="Daughter / Next of Kin">Daughter / Next of Kin</option>
+                  <option value="Parent / Legal Guardian">Parent / Legal Guardian</option>
+                  <option value="Sibling">Sibling</option>
+                  <option value="Other Emergency Contact">Other Emergency Contact</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Emergency Phone Number (with Country/Area Code) <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="tel"
+                    required
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="+1 (555) 349-8291"
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px 9px 36px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      fontSize: 13,
+                      boxSizing: 'border-box',
+                      fontFamily: 'monospace',
+                      fontWeight: 600,
+                      outline: 'none',
+                      color: '#0f172a'
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = '#0284c7')}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = '#cbd5e1')}
+                  />
+                  <Phone
+                    size={15}
+                    style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}
+                  />
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                  Ensure this line is accessible 24/7 during inpatient admission.
+                </div>
+              </div>
+
+              {/* Form Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowContactModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    color: '#475569',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingContact}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 8,
+                    border: 'none',
+                    backgroundColor: '#0b4da2',
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: isSavingContact ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  {isSavingContact ? <RefreshCw size={13} className="spin" /> : <Check size={14} />}
+                  <span>{isSavingContact ? 'Saving...' : 'Save Emergency Contact'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

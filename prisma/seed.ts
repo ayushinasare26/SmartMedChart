@@ -374,6 +374,9 @@ async function main() {
       creatinine: 1.1,
       bilirubin: 0.8,
       platelets: 194,
+      emergencyContactName: 'Sunita Patil',
+      emergencyContactRelation: 'Spouse / Primary Proxy',
+      emergencyContactPhone: '+1 (555) 349-8291',
     },
   });
 
@@ -393,6 +396,9 @@ async function main() {
       status: 'ACTIVE',
       eGFR: 45,
       creatinine: 1.8,
+      emergencyContactName: 'Vikram Desai',
+      emergencyContactRelation: 'Son',
+      emergencyContactPhone: '+1 (555) 782-9014',
     },
   });
 
@@ -411,6 +417,9 @@ async function main() {
       codeStatus: 'Full',
       status: 'ACTIVE',
       eGFR: 78,
+      emergencyContactName: 'Sarah Matthews',
+      emergencyContactRelation: 'Spouse',
+      emergencyContactPhone: '+1 (555) 412-6893',
     },
   });
 
@@ -429,6 +438,9 @@ async function main() {
       codeStatus: 'DNR/DNI',
       status: 'ACTIVE',
       eGFR: 35,
+      emergencyContactName: 'David Brown',
+      emergencyContactRelation: 'Son / Power of Attorney',
+      emergencyContactPhone: '+1 (555) 903-2418',
     },
   });
 

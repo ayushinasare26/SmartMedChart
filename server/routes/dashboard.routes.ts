@@ -28,7 +28,7 @@ router.get('/nurse', async (req: AuthRequest, res: Response, next: NextFunction)
         where: { ...wardFilter, scheduledTime: { lte: thirtyMin }, status: 'PENDING' },
       }),
       prisma.medicationSchedule.count({
-        where: { ...wardFilter, scheduledTime: { gte: startOfDay, lte: now }, status: 'GIVEN' },
+        where: { ...wardFilter, scheduledTime: { gte: startOfDay, lte: endOfDay }, status: 'GIVEN' },
       }),
       prisma.medicationSchedule.count({
         where: { ...wardFilter, status: 'DELAYED' },
@@ -62,7 +62,7 @@ router.get('/nurse', async (req: AuthRequest, res: Response, next: NextFunction)
 // Doctor dashboard stats
 router.get('/doctor', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const [totalPatients, activeOrders, pendingCoSign, criticalAlerts, recentPrescriptions] = await Promise.all([
+    const [totalPatients, activeOrders, pendingCoSign, criticalAlerts, recentPrescriptions, recentAdministrations] = await Promise.all([
       prisma.patient.count({ where: { status: 'ACTIVE' } }),
       prisma.prescription.count({ where: { status: { in: ['ACTIVE', 'STAT'] } } }),
       prisma.prescription.count({ where: { requiresCoSign: true, coSignedAt: null } }),
@@ -76,9 +76,22 @@ router.get('/doctor', async (req: AuthRequest, res: Response, next: NextFunction
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
+      prisma.administrationRecord.findMany({
+        take: 8,
+        orderBy: { signedAt: 'desc' },
+        include: {
+          patient: { select: { id: true, name: true, mrn: true, bed: true } },
+          administeredBy: { select: { id: true, name: true, role: true, staffId: true } },
+          schedule: {
+            include: {
+              prescription: { select: { medicationName: true, dose: true, unit: true, route: true } },
+            },
+          },
+        },
+      }),
     ]);
 
-    res.json({ totalPatients, activeOrders, pendingCoSign, criticalAlerts, recentPrescriptions });
+    res.json({ totalPatients, activeOrders, pendingCoSign, criticalAlerts, recentPrescriptions, recentAdministrations });
   } catch (error) { next(error); }
 });
 
