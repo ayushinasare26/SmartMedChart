@@ -5,6 +5,7 @@ import { AlertTriangle, Search, Plus, User, QrCode } from 'lucide-react';
 import { useState } from 'react';
 import { format, differenceInYears } from 'date-fns';
 import { HospitalPersonQRModal, HospitalPerson } from '../components/HospitalPersonQRModal';
+import { WorkflowStepsNavBar } from '../components/WorkflowStepsNavBar';
 
 export default function PatientsListPage() {
   const navigate = useNavigate();
@@ -37,6 +38,8 @@ export default function PatientsListPage() {
           <button className="btn-primary" style={{ fontSize: 12 }}><Plus size={13} /> Admit Patient</button>
         </div>
       </div>
+
+      <WorkflowStepsNavBar />
 
       <div className="page-content">
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

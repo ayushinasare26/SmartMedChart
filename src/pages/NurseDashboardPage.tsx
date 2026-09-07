@@ -4,6 +4,7 @@ import { dashboardService, scheduleService } from '../services/api.services';
 import { format } from 'date-fns';
 import { AlertTriangle, Clock, CheckCircle2, Timer, Activity, Plus, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { WorkflowStepsNavBar } from '../components/WorkflowStepsNavBar';
 
 const WARD = 'WARD-4B-ICU';
 
@@ -102,16 +103,7 @@ export default function NurseDashboardPage() {
       </div>
 
       {/* Workflow Steps */}
-      <div className="workflow-steps">
-        {['Overview Dashboard', 'Patient eMAR & Schedule', 'CPOE Prescription Form', 'Allergy Safety Alert', 'QR Code Verification'].map((step, i) => (
-          <div key={step} className={`workflow-step ${i === 0 ? 'active' : ''}`}>
-            <span style={{ background: i === 0 ? 'var(--color-accent-blue)' : 'var(--color-border)', color: i === 0 ? 'white' : 'var(--color-text-muted)', width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
-              {i + 1}
-            </span>
-            {step}
-          </div>
-        ))}
-      </div>
+      <WorkflowStepsNavBar />
 
       {/* Patient Banner — STAT */}
       {schedules.some(isStatUrgent) && (

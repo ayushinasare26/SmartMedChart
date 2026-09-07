@@ -7,6 +7,7 @@ import { patientService, prescriptionService } from '../services/api.services';
 import { AlertTriangle, Search, Shield, ChevronRight, Loader2, Plus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { WorkflowStepsNavBar } from '../components/WorkflowStepsNavBar';
 
 const FORMULARY = [
   { name: 'Ceftriaxone Sodium (Rocephin)', generic: 'Ceftriaxone', class: 'Cephalosporin', conflict: true },
@@ -156,6 +157,8 @@ export default function CPOEPrescriptionPage() {
           </div>
         </div>
       </div>
+
+      <WorkflowStepsNavBar />
 
       {/* Assigned Physician */}
       {watchPatient && selectedPatient && (

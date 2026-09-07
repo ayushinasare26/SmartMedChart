@@ -5,6 +5,7 @@ import { AlertTriangle, FileText, Users, Activity, Shield, Plus, Clock, CheckCir
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { format } from 'date-fns';
+import { WorkflowStepsNavBar } from '../components/WorkflowStepsNavBar';
 
 export default function DoctorDashboardPage() {
   const { user } = useAuth();
@@ -66,6 +67,8 @@ export default function DoctorDashboardPage() {
           </div>
         </div>
       </div>
+
+      <WorkflowStepsNavBar />
 
       <div className="page-content">
         <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

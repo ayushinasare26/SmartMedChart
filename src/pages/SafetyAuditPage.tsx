@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { dashboardService, auditService } from '../services/api.services';
 import { Shield, Activity, AlertTriangle, CheckCircle2, Download, Sliders } from 'lucide-react';
 import { format } from 'date-fns';
+import { WorkflowStepsNavBar } from '../components/WorkflowStepsNavBar';
 
 const WARD = 'WARD-4B-ICU';
 
@@ -41,6 +42,8 @@ export default function SafetyAuditPage() {
           )}
         </div>
       </div>
+
+      <WorkflowStepsNavBar />
 
       <div className="page-content">
         {/* Header */}

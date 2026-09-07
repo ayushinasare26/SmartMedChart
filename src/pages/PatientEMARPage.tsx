@@ -5,6 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { format, differenceInMinutes } from 'date-fns';
 import { AlertTriangle, CheckCircle2, Clock, Scan, Shield, FileText, Activity, ChevronLeft, PhoneCall, QrCode } from 'lucide-react';
 import { HospitalPersonQRModal } from '../components/HospitalPersonQRModal';
+import { WorkflowStepsNavBar } from '../components/WorkflowStepsNavBar';
 
 function getStatusChip(status: string) {
   const map: Record<string, { bg: string; color: string; label: string }> = {
@@ -107,6 +108,8 @@ export default function PatientEMARPage() {
           </div>
         )}
       </div>
+
+      <WorkflowStepsNavBar />
 
       {/* Patient Header Banner */}
       <div style={{

@@ -4,6 +4,7 @@ import { patientService, scheduleService } from '../services/api.services';
 import { Scan, CheckCircle2, AlertTriangle, User, Pill, Hash, MapPin, Clock, Shield, Loader2, QrCode } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
+import { WorkflowStepsNavBar } from '../components/WorkflowStepsNavBar';
 
 const DEMO_PATIENTS_IDS: string[] = []; // Filled from DB
 
@@ -121,6 +122,8 @@ export default function BedsideScannerPage() {
           <span className="chip chip-stat"><AlertTriangle size={11} /> 1 STAT MED DUE</span>
         </div>
       </div>
+
+      <WorkflowStepsNavBar />
 
       <div className="page-content" style={{ maxWidth: 900, margin: '0 auto' }}>
         <h1 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 800, color: 'var(--color-text-primary)' }}>
